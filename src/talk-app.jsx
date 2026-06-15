@@ -1,8 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import charConfig from './character-config';
+import { BG_OPTIONS, clamp, themeColors } from './engine/shared';
+import { useAvatarLoop } from './engine/useAvatarLoop';
+import { useMouseDirection } from './drivers/mouseDirection';
+import { useAudioMouth } from './drivers/audioMouth';
+import { useBlinkTimer } from './drivers/blinkTimer';
 
-const { useState, useEffect, useRef, useMemo } = React;
+const { useState, useRef, useMemo } = React;
 
 const TALK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "followRange": 340,
@@ -28,192 +33,29 @@ const SHEETS = [
 ];
 const sheetFor = (eyesClosed, mouth) => SHEETS[(eyesClosed ? 3 : 0) + mouth];
 const SRC = (sheet, r, c) => charConfig.src(sheet, r, c);
-const BG_OPTIONS = ['#FFF8EE', '#FDEFEF', '#EEF4FB', '#2B2926'];
-
-function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
-
-// ---- 音声エンジン ----
-function makeAudioEngine() {
-  const st = {
-    ctx: null, micAnalyser: null, micStream: null,
-    fileAnalyser: null, fileSourceMade: false, buf: null
-  };
-  function ctx() {
-    if (!st.ctx) st.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    return st.ctx;
-  }
-  function levelOf(analyser) {
-    if (!analyser) return 0;
-    if (!st.buf || st.buf.length !== analyser.fftSize) st.buf = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(st.buf);
-    let sum = 0;
-    for (let i = 0; i < st.buf.length; i++) sum += st.buf[i] * st.buf[i];
-    return Math.sqrt(sum / st.buf.length);
-  }
-  return {
-    async startMic() {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const c = ctx();
-      await c.resume();
-      const src = c.createMediaStreamSource(stream);
-      const an = c.createAnalyser();
-      an.fftSize = 1024;
-      src.connect(an);
-      st.micStream = stream;
-      st.micAnalyser = an;
-    },
-    stopMic() {
-      if (st.micStream) st.micStream.getTracks().forEach((t) => t.stop());
-      st.micStream = null;
-      st.micAnalyser = null;
-    },
-    attachAudioEl(el) {
-      if (st.fileSourceMade) return;
-      const c = ctx();
-      const src = c.createMediaElementSource(el);
-      const an = c.createAnalyser();
-      an.fftSize = 1024;
-      src.connect(an);
-      an.connect(c.destination);
-      st.fileAnalyser = an;
-      st.fileSourceMade = true;
-    },
-    resume() { if (st.ctx) st.ctx.resume(); },
-    level() { return Math.max(levelOf(st.micAnalyser), levelOf(st.fileAnalyser)); },
-    micOn() { return !!st.micAnalyser; }
-  };
-}
 
 function App() {
   const [t, setTweak] = useTweaks(TALK_DEFAULTS);
   const [cell, setCell] = useState({ r: 2, c: 2 });
   const [mouth, setMouth] = useState(0);        // 0:とじ 1:中間 2:開け
-  const [blink, setBlink] = useState(false);
-  const [micOn, setMicOn] = useState(false);
-  const [micErr, setMicErr] = useState('');
-  const [fileName, setFileName] = useState('');
 
   const charRef = useRef(null);
-  const audioElRef = useRef(null);
   const meterRef = useRef(null);
-  const engine = useMemo(() => makeAudioEngine(), []);
   const target = useRef({ x: 0, y: 0 });
-  const current = useRef({ x: 0, y: 0 });
-  const env = useRef(0);
   const tweaksRef = useRef(t);
   tweaksRef.current = t;
 
-  // マウス追従
-  useEffect(() => {
-    function onMove(e) {
-      const el = charRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height * 0.45;
-      const range = tweaksRef.current.followRange;
-      target.current.x = clamp((e.clientX - cx) / range, -1, 1);
-      target.current.y = clamp((e.clientY - cy) / range, -1, 1);
-    }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerdown', onMove);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerdown', onMove);
-    };
-  }, []);
+  // 方向: マウス追従、口: 音声、まばたき: タイマー（autoBlink で開閉）
+  useMouseDirection({ charRef, tweaksRef, targetRef: target });
+  const audio = useAudioMouth(meterRef);
+  const blink = useBlinkTimer(t.autoBlink);
 
-  // メインループ: 追従 + 音声レベル → 口段階
-  useEffect(() => {
-    let raf;
-    let last = { r: 2, c: 2 };
-    let lastMouth = 0;
-    let lastSwitch = 0;
-    function tick(now) {
-      const tw = tweaksRef.current;
-      current.current.x += (target.current.x - current.current.x) * tw.smoothing;
-      current.current.y += (target.current.y - current.current.y) * tw.smoothing;
-      const c = clamp(Math.round((current.current.x + 1) / 2 * (COLS - 1)), 0, COLS - 1);
-      const r = clamp(Math.round((current.current.y + 1) / 2 * (ROWS - 1)), 0, ROWS - 1);
-      if (r !== last.r || c !== last.c) { last = { r, c }; setCell(last); }
-      const raw = engine.level() * tw.micGain;
-      if (raw > env.current) env.current += (raw - env.current) * 0.6;
-      else env.current += (raw - env.current) * tw.release;
-      if (meterRef.current) {
-        meterRef.current.style.width = `${clamp(env.current / 0.4, 0, 1) * 100}%`;
-      }
-      const lv = env.current;
-      const m = lv >= tw.thFull ? 2 : lv >= tw.thHalf ? 1 : 0;
-      if (m !== lastMouth && now - lastSwitch > 70) {
-        lastMouth = m; lastSwitch = now; setMouth(m);
-      }
-      raf = requestAnimationFrame(tick);
-    }
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [engine]);
-
-  // 自動まばたき（自然なゆらぎ: 不規則な間隔 + 二度瞬き + ゆっくり瞬き）
-  useEffect(() => {
-    if (!t.autoBlink) { setBlink(false); return; }
-    let alive = true;
-    let timer;
-    const rand = (a, b) => a + Math.random() * (b - a);
-    function blinkOnce(dur, after) {
-      setBlink(true);
-      timer = setTimeout(() => {
-        if (!alive) return;
-        setBlink(false);
-        timer = setTimeout(after, rand(120, 220));
-      }, dur);
-    }
-    function doBlink() {
-      if (!alive) return;
-      const roll = Math.random();
-      if (roll < 0.22) {
-        // 二度瞬き（パチパチ）
-        blinkOnce(rand(80, 120), () => { if (alive) blinkOnce(rand(70, 110), schedule); });
-      } else if (roll < 0.28) {
-        // ゆっくり瞬き
-        blinkOnce(rand(260, 420), schedule);
-      } else {
-        blinkOnce(rand(90, 150), schedule);
-      }
-    }
-    function schedule() {
-      if (!alive) return;
-      const u = Math.random();
-      let wait;
-      if (u < 0.12) wait = rand(700, 1500);        // たまに間隔が詰まる
-      else if (u < 0.82) wait = rand(1800, 4500);  // 通常
-      else wait = rand(4500, 9000);                // ぼーっとする間
-      timer = setTimeout(doBlink, wait);
-    }
-    schedule();
-    return () => { alive = false; clearTimeout(timer); };
-  }, [t.autoBlink]);
-
-  async function toggleMic() {
-    setMicErr('');
-    if (micOn) { engine.stopMic(); setMicOn(false); return; }
-    try {
-      await engine.startMic();
-      setMicOn(true);
-    } catch (e) {
-      setMicErr('マイクを使用できません（権限を確認してください）');
-    }
-  }
-
-  function onFilePick(e) {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    const el = audioElRef.current;
-    engine.attachAudioEl(el);
-    engine.resume();
-    el.src = URL.createObjectURL(f);
-    el.play().catch(() => {});
-    setFileName(f.name);
-  }
+  // メインループ1本で 追従 + 音声→口段階 を回す
+  useAvatarLoop({
+    tweaksRef, targetRef: target, rows: ROWS, cols: COLS,
+    onCell: setCell,
+    onFrame: (now, tw) => { const m = audio.frame(now, tw); if (m != null) setMouth(m); },
+  });
 
   const allFrames = useMemo(() => {
     const arr = [];
@@ -222,11 +64,7 @@ function App() {
   }, []);
   const activeSheet = sheetFor(blink, mouth);
 
-  const dark = t.bgColor === '#2B2926';
-  const inkColor = dark ? 'rgba(255,248,238,0.85)' : 'rgba(60,48,38,0.8)';
-  const subColor = dark ? 'rgba(255,248,238,0.45)' : 'rgba(60,48,38,0.45)';
-  const panelBg = dark ? 'rgba(48,45,42,0.92)' : 'rgba(255,255,255,0.88)';
-  const lineColor = dark ? 'rgba(255,248,238,0.14)' : 'rgba(60,48,38,0.12)';
+  const { inkColor, subColor, panelBg, lineColor } = themeColors(t.bgColor);
 
   const sizeVmin = t.charSize * 4 / 3;
 
@@ -265,21 +103,21 @@ function App() {
         padding: '12px 18px', cursor: 'default',
         boxShadow: '0 6px 24px rgba(60,48,38,0.10)'
       }}>
-        <button onClick={toggleMic} style={{
+        <button onClick={audio.toggleMic} style={{
           display: 'flex', alignItems: 'center', gap: 8,
           fontFamily: 'inherit', fontWeight: 700, fontSize: 14,
-          color: micOn ? '#fff' : inkColor,
-          background: micOn ? '#D96C4F' : 'transparent',
-          border: `1.5px solid ${micOn ? '#D96C4F' : lineColor}`,
+          color: audio.micOn ? '#fff' : inkColor,
+          background: audio.micOn ? '#D96C4F' : 'transparent',
+          border: `1.5px solid ${audio.micOn ? '#D96C4F' : lineColor}`,
           borderRadius: 12, padding: '9px 16px', cursor: 'pointer',
           minHeight: 44
         }}>
           <span style={{
             width: 9, height: 9, borderRadius: '50%',
-            background: micOn ? '#fff' : '#D96C4F',
-            animation: micOn ? 'pulse 1.2s ease-in-out infinite' : 'none'
+            background: audio.micOn ? '#fff' : '#D96C4F',
+            animation: audio.micOn ? 'pulse 1.2s ease-in-out infinite' : 'none'
           }}></span>
-          {micOn ? 'マイク停止' : 'マイク開始'}
+          {audio.micOn ? 'マイク停止' : 'マイク開始'}
         </button>
 
         <label style={{
@@ -289,7 +127,7 @@ function App() {
           padding: '9px 16px', cursor: 'pointer', minHeight: 44, boxSizing: 'border-box'
         }}>
           ♪ 音声ファイル
-          <input type="file" accept="audio/*" onChange={onFilePick} style={{ display: 'none' }}></input>
+          <input type="file" accept="audio/*" onChange={audio.onFilePick} style={{ display: 'none' }}></input>
         </label>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 150 }}>
@@ -307,12 +145,12 @@ function App() {
           </div>
         </div>
       </div>
-      {micErr ? (
-        <div style={{ position: 'absolute', bottom: 92, left: '50%', transform: 'translateX(-50%)', color: '#B3261E', fontSize: 13, fontWeight: 700 }}>{micErr}</div>
+      {audio.micErr ? (
+        <div style={{ position: 'absolute', bottom: 92, left: '50%', transform: 'translateX(-50%)', color: '#B3261E', fontSize: 13, fontWeight: 700 }}>{audio.micErr}</div>
       ) : null}
-      <audio ref={audioElRef} controls style={{
+      <audio ref={audio.audioElRef} controls style={{
         position: 'absolute', bottom: 20, right: 20, width: 260,
-        display: fileName ? 'block' : 'none', cursor: 'default'
+        display: audio.fileName ? 'block' : 'none', cursor: 'default'
       }}></audio>
 
       <a href="guruguru.html" style={{

@@ -1,8 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import charConfig from './character-config';
+import { BG_OPTIONS, themeColors } from './engine/shared';
+import { useAvatarLoop } from './engine/useAvatarLoop';
+import { useMouseDirection } from './drivers/mouseDirection';
+import { useBlinkTimer } from './drivers/blinkTimer';
 
-const { useState, useEffect, useRef, useMemo } = React;
+const { useState, useRef, useMemo } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "followRange": 340,
@@ -16,98 +20,20 @@ const { rows: ROWS, cols: COLS } = charConfig;
 const SRC = (r, c) => charConfig.src(charConfig.sheets.eyesOpen.close, r, c);
 const BLINK_SRC = (r, c) => charConfig.src(charConfig.sheets.eyesClosed.close, r, c);
 
-const BG_OPTIONS = ['#FFF8EE', '#FDEFEF', '#EEF4FB', '#2B2926'];
-
-function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
-
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [cell, setCell] = useState({ r: 2, c: 2 });
   const [pressed, setPressed] = useState(false);
-  const [blink, setBlink] = useState(false);
   const stageRef = useRef(null);
   const charRef = useRef(null);
   const target = useRef({ x: 0, y: 0 });   // -1..1
-  const current = useRef({ x: 0, y: 0 });
   const tweaksRef = useRef(t);
   tweaksRef.current = t;
 
-  useEffect(() => {
-    function onMove(e) {
-      const el = charRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height * 0.45;
-      const range = tweaksRef.current.followRange;
-      target.current.x = clamp((e.clientX - cx) / range, -1, 1);
-      target.current.y = clamp((e.clientY - cy) / range, -1, 1);
-    }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerdown', onMove);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerdown', onMove);
-    };
-  }, []);
-
-  useEffect(() => {
-    let raf;
-    let last = { r: 2, c: 2 };
-    function tick() {
-      const k = tweaksRef.current.smoothing;
-      current.current.x += (target.current.x - current.current.x) * k;
-      current.current.y += (target.current.y - current.current.y) * k;
-      const c = clamp(Math.round((current.current.x + 1) / 2 * (COLS - 1)), 0, COLS - 1);
-      const r = clamp(Math.round((current.current.y + 1) / 2 * (ROWS - 1)), 0, ROWS - 1);
-      if (r !== last.r || c !== last.c) {
-        last = { r, c };
-        setCell(last);
-      }
-      raf = requestAnimationFrame(tick);
-    }
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  // 自動まばたき（自然なゆらぎ: 不規則な間隔 + 二度瞬き + ゆっくり瞬き）
-  useEffect(() => {
-    let alive = true;
-    let timer;
-    const rand = (a, b) => a + Math.random() * (b - a);
-    function blinkOnce(dur, after) {
-      setBlink(true);
-      timer = setTimeout(() => {
-        if (!alive) return;
-        setBlink(false);
-        timer = setTimeout(after, rand(120, 220));
-      }, dur);
-    }
-    function doBlink() {
-      if (!alive) return;
-      const roll = Math.random();
-      if (roll < 0.22) {
-        // 二度瞬き（パチパチ）
-        blinkOnce(rand(80, 120), () => { if (alive) blinkOnce(rand(70, 110), schedule); });
-      } else if (roll < 0.28) {
-        // ゆっくり瞬き
-        blinkOnce(rand(260, 420), schedule);
-      } else {
-        blinkOnce(rand(90, 150), schedule);
-      }
-    }
-    function schedule() {
-      if (!alive) return;
-      const u = Math.random();
-      let wait;
-      if (u < 0.12) wait = rand(700, 1500);        // たまに間隔が詰まる
-      else if (u < 0.82) wait = rand(1800, 4500);  // 通常
-      else wait = rand(4500, 9000);                // ぼーっとする間
-      timer = setTimeout(doBlink, wait);
-    }
-    schedule();
-    return () => { alive = false; clearTimeout(timer); };
-  }, []);
+  // 方向: マウス追従 → target、まばたき: タイマー、メインループ: 共有
+  useMouseDirection({ charRef, tweaksRef, targetRef: target });
+  const blink = useBlinkTimer(true);
+  useAvatarLoop({ tweaksRef, targetRef: target, rows: ROWS, cols: COLS, onCell: setCell });
 
   const frames = useMemo(() => {
     const arr = [];
@@ -115,9 +41,7 @@ function App() {
     return arr;
   }, []);
 
-  const dark = t.bgColor === '#2B2926';
-  const inkColor = dark ? 'rgba(255,248,238,0.85)' : 'rgba(60,48,38,0.8)';
-  const subColor = dark ? 'rgba(255,248,238,0.45)' : 'rgba(60,48,38,0.45)';
+  const { inkColor, subColor } = themeColors(t.bgColor);
 
   return (
     <div
