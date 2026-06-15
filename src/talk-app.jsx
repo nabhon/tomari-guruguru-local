@@ -28,7 +28,14 @@ const TALK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "mouthFromFace": false,
   "blinkFromFace": false,
   "jawHalf": 0.15,
-  "jawFull": 0.4
+  "jawFull": 0.4,
+  "faceBrightness": 1,
+  "faceContrast": 1,
+  "facePreview": true,
+  "faceResolution": "480",
+  "faceMinDetection": 0.5,
+  "faceMinPresence": 0.5,
+  "faceMinTracking": 0.5
 }/*EDITMODE-END*/;
 
 // クロマキー用の単色プリセット（緑 / 青 / マゼンタ）
@@ -83,6 +90,11 @@ function App() {
     },
   });
 
+  // 解像度変更 → ストリーム再取得（モデル維持）。信頼度しきい値変更 → モデル再生成（ストリーム維持）。
+  // どちらもカメラOFF時は no-op。
+  useEffect(() => { face.applyCamera(); }, [t.faceResolution]);
+  useEffect(() => { face.applyDetection(); }, [t.faceMinDetection, t.faceMinPresence, t.faceMinTracking]);
+
   // UI 表示/非表示トグル: F9（web/desktop 共通）＋ Electron の 表示メニュー
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'F9') { e.preventDefault(); setHideUI((v) => !v); } };
@@ -134,6 +146,14 @@ function App() {
 
       {/* 顔追跡用の隠し映像。UI 非表示中も追跡を続けるため hideUI の外に置く。 */}
       <video ref={face.videoRef} muted playsInline style={{ display: 'none' }}></video>
+      {/* 明度/コントラスト適用＋プレビュー兼用の canvas。常にマウントして描画し続け（検出に使う）、
+          表示だけを切り替える。プレビューは自撮り感のため CSS で左右反転（検出画素には無影響）。 */}
+      <canvas ref={face.canvasRef} style={{
+        position: 'absolute', bottom: 20, left: 20, width: 160, borderRadius: 10,
+        border: `1px solid ${lineColor}`, transform: 'scaleX(-1)', pointerEvents: 'none',
+        boxShadow: '0 6px 24px rgba(60,48,38,0.16)',
+        display: (face.cameraOn && t.facePreview && !hideUI) ? 'block' : 'none'
+      }}></canvas>
 
       {!hideUI && (<>
       <div style={{ position: 'absolute', top: '3.5vh', left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
@@ -267,6 +287,28 @@ function App() {
           onChange={(v) => setTweak('jawFull', v)}></TweakSlider>
         <TweakToggle label="Blink from face" value={t.blinkFromFace}
           onChange={(v) => setTweak('blinkFromFace', v)}></TweakToggle>
+        <TweakSection label="Camera tuning"></TweakSection>
+        <TweakSlider label="Brightness" value={t.faceBrightness} min={0.5} max={2} step={0.05}
+          onChange={(v) => setTweak('faceBrightness', v)}></TweakSlider>
+        <TweakSlider label="Contrast" value={t.faceContrast} min={0.5} max={2} step={0.05}
+          onChange={(v) => setTweak('faceContrast', v)}></TweakSlider>
+        {face.cameras.length > 1 ? (
+          <TweakSelect label="Camera" value={face.cameraId}
+            options={face.cameras.map((c) => ({ value: c.deviceId, label: c.label }))}
+            onChange={(v) => face.selectCamera(v)}></TweakSelect>
+        ) : null}
+        <TweakRadio label="Resolution" value={t.faceResolution}
+          options={[{ value: '480', label: '480p' }, { value: '720', label: '720p' }]}
+          onChange={(v) => setTweak('faceResolution', v)}></TweakRadio>
+        <TweakToggle label="Show preview" value={t.facePreview}
+          onChange={(v) => setTweak('facePreview', v)}></TweakToggle>
+        <TweakSection label="Detection (advanced)"></TweakSection>
+        <TweakSlider label="Min detection" value={t.faceMinDetection} min={0.1} max={0.9} step={0.05}
+          onChange={(v) => setTweak('faceMinDetection', v)}></TweakSlider>
+        <TweakSlider label="Min presence" value={t.faceMinPresence} min={0.1} max={0.9} step={0.05}
+          onChange={(v) => setTweak('faceMinPresence', v)}></TweakSlider>
+        <TweakSlider label="Min tracking" value={t.faceMinTracking} min={0.1} max={0.9} step={0.05}
+          onChange={(v) => setTweak('faceMinTracking', v)}></TweakSlider>
       </TweaksPanel>
       </>)}
     </div>

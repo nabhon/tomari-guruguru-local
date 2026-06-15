@@ -117,6 +117,9 @@ Drive the character's head direction (and optionally mouth + blink) from the use
 - **Calibration** ("look straight" → captures neutral; auto-captured on the first frame too) + **sensitivity** + **mirror/invert** tweaks. Throttled ~30fps inference (`requestVideoFrameCallback`); graceful fallback to mouse on permission/camera failure.
 - **Assets bundled** under `public/mediapipe/` (WASM + `face_landmarker.task`, ~25 MB) via `scripts/fetch-mediapipe.mjs` (`npm run setup:mediapipe`), loaded with `import.meta.env.BASE_URL` so dev/Pages/electron all resolve. MediaPipe is **dynamically imported** (own lazy chunk; main bundle barely grows). `verify:pages` asserts the assets exist. Electron's existing `'media'` permission grant covers the camera — no change.
 
+### Accuracy controls (follow-up)
+Added a tracking-quality pass: software brightness/contrast (canvas `ctx.filter` → fed to detection), a live mirrored preview, camera-device selection, capture resolution (480p/720p), and MediaPipe confidence thresholds. Camera/resolution restart the stream (`applyCamera`); thresholds rebuild the model (`applyDetection`); both debounced.
+
 ### Notes
 - **No camera contention** with Cycle 2: that path is OBS *Window Capture* of the app window, not a webcam, so the tracking webcam is the only camera in use.
 - Privacy: inference is fully local (WASM); the UI states "顔追跡は端末内だけで処理されます（送信なし）".
