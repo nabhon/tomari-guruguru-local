@@ -13,6 +13,7 @@ release/
 public/*
 !public/slices2/
 !public/mediapipe/
+!public/guide/
 characters/
 .DS_Store
 Thumbs.db

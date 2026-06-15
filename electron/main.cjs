@@ -79,8 +79,9 @@ function buildMenu() {
 ipcMain.on('tweaks:load', (e, key) => { e.returnValue = settings.getTweaks(key); });
 ipcMain.on('tweaks:save', (e, { key, edits }) => { settings.saveTweaks(key, edits); });
 
-// キャラクター一覧・フォルダを開く IPC
+// キャラクター一覧・作成・フォルダを開く IPC
 ipcMain.handle('characters:list', () => characters.listCharacters());
+ipcMain.handle('characters:create', (e, { name, files }) => characters.createCharacter(name, files));
 ipcMain.on('characters:reveal', () => { shell.openPath(characters.charactersDir()); });
 
 app.whenReady().then(() => {

@@ -57,6 +57,34 @@ function ensureDefaultCharacter() {
   }
 }
 
+// キャラ名の検証（パス区切り・危険文字・.. を弾く）
+function validName(name) {
+  return typeof name === 'string' && name.length > 0 && name.length <= 64
+    && !/[\\/:*?"<>|]/.test(name) && name !== '.' && name !== '..';
+}
+
+// 6シートからスライス済みの 150 フレームを characters/<name>/ に書き出す。
+// files: [{ path: 'A/r0c0.webp', data: ArrayBuffer|Uint8Array|Buffer }]
+function createCharacter(name, files) {
+  if (!validName(name)) return { ok: false, error: 'invalid name' };
+  const dir = charactersDir();
+  const target = path.join(dir, name);
+  if (fs.existsSync(target)) return { ok: false, error: 'exists' };
+  try {
+    for (const f of files) {
+      const rel = String(f.path).replace(/\\/g, '/');
+      if (rel.includes('..') || rel.startsWith('/')) continue; // 念のため
+      const out = path.join(target, rel);
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      fs.writeFileSync(out, Buffer.from(f.data));
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error('createCharacter failed:', e);
+    return { ok: false, error: 'write failed' };
+  }
+}
+
 // tomari-char://chars/<name>/<sheet>/<file> → 実ファイルパス（.. による脱出は拒否）
 function resolveCharFile(urlStr) {
   let rel;
@@ -68,4 +96,4 @@ function resolveCharFile(urlStr) {
   return file;
 }
 
-module.exports = { charactersDir, listCharacters, ensureDefaultCharacter, resolveCharFile };
+module.exports = { charactersDir, listCharacters, ensureDefaultCharacter, resolveCharFile, createCharacter };

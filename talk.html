@@ -8,6 +8,8 @@
 <style>
   html, body { margin: 0; padding: 0; height: 100%; }
   img { -webkit-user-drag: none; }
+  .no-bar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-bar::-webkit-scrollbar { display: none; }
   @media (prefers-reduced-motion: no-preference) {
     .bob { animation: bob 3.4s ease-in-out infinite; }
     @keyframes bob {

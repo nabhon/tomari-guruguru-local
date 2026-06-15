@@ -205,6 +205,16 @@ https://rotejin.github.io/tomari-guruguru/
 - **`npm run dev`**: プロジェクト直下の `characters/` を読みます（無ければ作成して同上の構成で配置）。
 - **GitHub Pages（静的公開）**: フォルダ走査ができないため、同梱のトマリのみ表示されます。
 
+### アプリ内で追加する（＋ Add character）
+
+手動でフォルダを作らなくても、左メニューの **＋ Add character** から追加できます（デスクトップ版／`npm run dev`）。
+
+1. **？ How to make** を開き、5×5テンプレートと **Copy prompt** を使って6枚の角度シート（A〜F）を生成する
+2. **＋ Add character** を開き、A〜Fの枠に6枚を選び、名前を入れて **Create**
+3. アプリが各シートを5×5に分割して150フレームを書き出し、そのキャラを選択します
+
+> アプリ内のスライスは単純な5×5分割です。AI生成シート（プロンプト通りに整列・透過背景）には十分ですが、髪のはみ出しや背景残りがある素材は `tools/slice_character_sheets.py`（component mode）の方が高品質です。
+
 ---
 
 ## 自分のキャラで作るには

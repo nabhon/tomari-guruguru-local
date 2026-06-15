@@ -7,6 +7,7 @@ import { useMouseDirection } from './drivers/mouseDirection';
 import { useAudioMouth } from './drivers/audioMouth';
 import { useBlinkTimer } from './drivers/blinkTimer';
 import { useFaceTracking } from './drivers/faceTracking';
+import { GEN_PROMPT, GUIDE_STEPS, GUIDE_NOTE } from './character-guide';
 
 const { useState, useRef, useMemo, useEffect, useCallback } = React;
 
@@ -66,6 +67,57 @@ async function resolveCharacters() {
   return [BUILTIN_CHAR];
 }
 
+// 追加用シート（A–F）とラベル
+const SHEET_KEYS = ['A', 'B', 'C', 'D', 'E', 'F'];
+const SHEET_DESC = {
+  A: 'Eyes open · mouth closed', B: 'Eyes open · mouth half', C: 'Eyes open · mouth open',
+  D: 'Eyes closed · mouth closed', E: 'Eyes closed · mouth half', F: 'Eyes closed · mouth open',
+};
+
+// 6シートを 5×5 単純分割で 150 フレーム(webp)へ。fileMap[sheet] は File。
+async function sliceSheets(fileMap, onProgress) {
+  const out = [];
+  let done = 0;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  for (const sheet of SHEET_KEYS) {
+    const bmp = await createImageBitmap(fileMap[sheet]);
+    const cw = Math.floor(bmp.width / 5), ch = Math.floor(bmp.height / 5);
+    canvas.width = cw; canvas.height = ch;
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) {
+      ctx.clearRect(0, 0, cw, ch);
+      ctx.drawImage(bmp, c * cw, r * ch, cw, ch, 0, 0, cw, ch);
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/webp', 1));
+      out.push({ path: `${sheet}/r${r}c${c}.webp`, data: await blob.arrayBuffer() });
+      if (onProgress) onProgress(++done);
+    }
+    if (bmp.close) bmp.close();
+  }
+  return out;
+}
+
+function abToB64(buf) {
+  let bin = '';
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+// Electron はブリッジ、dev は POST で書き出す。→ {ok, error?}
+async function writeCharacter(name, frames) {
+  const d = typeof window !== 'undefined' ? window.tomariDesktop : null;
+  if (d && d.createCharacter) return await d.createCharacter(name, frames);
+  const files = frames.map((f) => ({ path: f.path, b64: abToB64(f.data) }));
+  const res = await fetch('/__characters/create', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, files }),
+  });
+  return await res.json();
+}
+
+const CAN_ADD = (typeof window !== 'undefined' && window.tomariDesktop && window.tomariDesktop.createCharacter)
+  || import.meta.env.DEV;
+
 const { rows: ROWS, cols: COLS } = charConfig;
 // シート: 目開け×口[とじ/中間/開け] = A/B/C, 目閉じ×口[とじ/中間/開け] = D/E/F
 const SHEETS = [
@@ -89,6 +141,14 @@ function App() {
   const [characters, setCharacters] = useState([BUILTIN_CHAR]);
   const [charBase, setCharBase] = useState(BUILTIN_CHAR.base);
   const [charMenuOpen, setCharMenuOpen] = useState(false);
+  // 追加/ガイドのモーダル状態
+  const [showAdd, setShowAdd] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addFiles, setAddFiles] = useState({});   // { A: File, ... }
+  const [addStatus, setAddStatus] = useState('');
+  const [addBusy, setAddBusy] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
 
   const charRef = useRef(null);
   const meterRef = useRef(null);
@@ -103,6 +163,7 @@ function App() {
     const want = list.find((c) => c.id === tweaksRef.current.character) || list[0];
     setCharBase(want.base);
     if (want.id !== tweaksRef.current.character) setTweak('character', want.id);
+    return list;
   }, [setTweak]);
   useEffect(() => { refreshCharacters(); }, [refreshCharacters]);
 
@@ -110,6 +171,33 @@ function App() {
     setCharBase(c.base);
     setTweak('character', c.id);
   }, [setTweak]);
+
+  // 追加フロー: 検証 → スライス → 書き出し → 一覧更新 → 新キャラ選択
+  const doCreate = useCallback(async () => {
+    const name = addName.trim();
+    if (!name) { setAddStatus('Enter a name'); return; }
+    if (/[\\/:*?"<>|]/.test(name) || name === '.' || name === '..') { setAddStatus('Name has invalid characters'); return; }
+    if (SHEET_KEYS.some((k) => !addFiles[k])) { setAddStatus('Pick all 6 sheets (A–F)'); return; }
+    setAddBusy(true);
+    try {
+      setAddStatus('Slicing 0/150');
+      const frames = await sliceSheets(addFiles, (n) => setAddStatus(`Slicing ${n}/150`));
+      setAddStatus('Saving…');
+      const res = await writeCharacter(name, frames);
+      if (!res || !res.ok) {
+        setAddStatus(res && res.error === 'exists' ? 'A character with that name already exists' : 'Could not save (check the name)');
+        setAddBusy(false);
+        return;
+      }
+      const list = await refreshCharacters();
+      const made = list.find((c) => c.id === name);
+      if (made) selectCharacter(made);
+      setShowAdd(false); setAddName(''); setAddFiles({}); setAddStatus('');
+    } catch (e) {
+      setAddStatus('Error: ' + (e && e.message ? e.message : String(e)));
+    }
+    setAddBusy(false);
+  }, [addName, addFiles, refreshCharacters, selectCharacter]);
 
   // 入力ソース: 方向＝マウス／顔、口＝音声／顔、まばたき＝タイマー／顔。
   // 顔カメラが ON の間は顔が方向を握り、マウスは書き込みを止める。
@@ -230,6 +318,18 @@ function App() {
             );
           })}
         </div>
+        {CAN_ADD ? (
+          <button onClick={() => { setAddStatus(''); setShowAdd(true); }} style={{
+            fontFamily: 'inherit', fontWeight: 700, fontSize: 12, color: '#fff',
+            background: '#D96C4F', border: '1.5px solid #D96C4F', borderRadius: 10,
+            padding: '8px 12px', cursor: 'pointer'
+          }}>＋ Add character</button>
+        ) : null}
+        <button onClick={() => setShowGuide(true)} style={{
+          fontFamily: 'inherit', fontWeight: 700, fontSize: 12, color: inkColor,
+          background: 'transparent', border: `1.5px solid ${lineColor}`, borderRadius: 10,
+          padding: '8px 12px', cursor: 'pointer'
+        }}>？ How to make</button>
         <button onClick={refreshCharacters} style={{
           fontFamily: 'inherit', fontWeight: 700, fontSize: 12, color: inkColor,
           background: 'transparent', border: `1.5px solid ${lineColor}`, borderRadius: 10,
@@ -243,6 +343,94 @@ function App() {
           }}>📁 Open folder</button>
         ) : null}
       </div>
+
+      {/* キャラ追加モーダル */}
+      {showAdd ? (
+        <div onClick={() => { if (!addBusy) setShowAdd(false); }} style={{
+          position: 'absolute', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(2px)'
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: 'min(440px, 92vw)', maxHeight: '88vh', overflowY: 'auto',
+            background: panelBg, border: `1px solid ${lineColor}`, borderRadius: 16, padding: 20,
+            display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: inkColor }}>Add character</div>
+            <div style={{ fontSize: 12, color: subColor }}>Pick the 6 angle sheets (5×5 each). They’re sliced into 150 frames automatically.</div>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 700, color: inkColor }}>
+              Name
+              <input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="MyCharacter" style={{
+                fontFamily: 'inherit', fontSize: 14, padding: '8px 10px', borderRadius: 8,
+                border: `1.5px solid ${lineColor}`, background: 'rgba(255,255,255,0.6)', color: inkColor
+              }}></input>
+            </label>
+            {SHEET_KEYS.map((k) => (
+              <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 12, color: inkColor }}>
+                <span style={{ fontWeight: 700 }}>{k} — {SHEET_DESC[k]} {addFiles[k] ? '✓' : ''}</span>
+                <input type="file" accept="image/*" onChange={(e) => {
+                  const f = e.target.files && e.target.files[0];
+                  setAddFiles((prev) => ({ ...prev, [k]: f || undefined }));
+                }} style={{ fontSize: 12, color: subColor }}></input>
+              </label>
+            ))}
+            {addStatus ? <div style={{ fontSize: 12, fontWeight: 700, color: subColor }}>{addStatus}</div> : null}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button disabled={addBusy} onClick={() => setShowAdd(false)} style={{
+                fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: inkColor,
+                background: 'transparent', border: `1.5px solid ${lineColor}`, borderRadius: 10, padding: '8px 16px', cursor: 'pointer'
+              }}>Cancel</button>
+              <button disabled={addBusy} onClick={doCreate} style={{
+                fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff',
+                background: addBusy ? '#aaa' : '#D96C4F', border: 'none', borderRadius: 10, padding: '8px 16px',
+                cursor: addBusy ? 'default' : 'pointer'
+              }}>{addBusy ? 'Working…' : 'Create'}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 生成ガイドモーダル */}
+      {showGuide ? (
+        <div onClick={() => setShowGuide(false)} style={{
+          position: 'absolute', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(2px)'
+        }}>
+          <div className="no-bar" onClick={(e) => e.stopPropagation()} style={{
+            width: 'min(560px, 94vw)', maxHeight: '90vh', overflowY: 'auto',
+            background: panelBg, border: `1px solid ${lineColor}`, borderRadius: 16, padding: 20,
+            display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: inkColor }}>How to make a character</div>
+            <img src="guide/template-grid.png" alt="5×5 angle template (grid)" style={{
+              maxWidth: '100%', maxHeight: '38vh', objectFit: 'contain', alignSelf: 'center',
+              borderRadius: 10, border: `1px solid ${lineColor}`, background: '#fff'
+            }}></img>
+            <a href="guide/template-grid.png" download="tomari-5x5-template.png" style={{
+              alignSelf: 'center', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, color: inkColor,
+              textDecoration: 'none', border: `1.5px solid ${lineColor}`, borderRadius: 10, padding: '7px 14px'
+            }}>⤓ Download template (attach this to ChatGPT)</a>
+            <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: inkColor }}>
+              {GUIDE_STEPS.map((s, i) => <li key={i}>{s}</li>)}
+            </ol>
+            <div style={{ fontSize: 11, color: subColor }}>{GUIDE_NOTE}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+              <button onClick={() => {
+                navigator.clipboard.writeText(GEN_PROMPT).then(() => {
+                  setPromptCopied(true);
+                  setTimeout(() => setPromptCopied(false), 1500);
+                });
+              }} style={{
+                fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff',
+                background: '#4F86D9', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer'
+              }}>{promptCopied ? 'Copied!' : 'Copy prompt'}</button>
+              <button onClick={() => setShowGuide(false)} style={{
+                fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: inkColor,
+                background: 'transparent', border: `1.5px solid ${lineColor}`, borderRadius: 10, padding: '8px 16px', cursor: 'pointer'
+              }}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div style={{ position: 'absolute', top: '3.5vh', left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
         <div style={{ fontSize: 'clamp(18px, 2.4vmin, 26px)', fontWeight: 700, color: inkColor, letterSpacing: '0.18em' }}>Charac Talk</div>

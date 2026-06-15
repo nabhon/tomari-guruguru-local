@@ -15,6 +15,34 @@ function devCharactersPlugin() {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const url = req.url || '';
+        // 6シートをスライス済みで受け取り characters/<name>/ に書き出す（exe の characters:create と同等）
+        if (req.method === 'POST' && url === '/__characters/create') {
+          const chunks = [];
+          req.on('data', (c) => chunks.push(c));
+          req.on('end', () => {
+            const reply = (obj) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(obj)); };
+            try {
+              const { name, files } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+              if (typeof name !== 'string' || !name || /[\\/:*?"<>|]/.test(name) || name === '.' || name === '..') {
+                return reply({ ok: false, error: 'invalid name' });
+              }
+              const target = join(dir, name);
+              if (fs.existsSync(target)) return reply({ ok: false, error: 'exists' });
+              for (const f of files) {
+                const rel = String(f.path).replace(/\\/g, '/');
+                if (rel.includes('..') || rel.startsWith('/')) continue;
+                const out = normalize(join(target, rel));
+                if (!out.startsWith(dir)) continue;
+                fs.mkdirSync(join(out, '..'), { recursive: true });
+                fs.writeFileSync(out, Buffer.from(f.b64, 'base64'));
+              }
+              reply({ ok: true });
+            } catch (e) {
+              reply({ ok: false, error: 'write failed' });
+            }
+          });
+          return;
+        }
         if (url === '/__characters' || url.startsWith('/__characters?')) {
           let names = [];
           try {

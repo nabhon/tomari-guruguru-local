@@ -14,7 +14,8 @@ contextBridge.exposeInMainWorld('tomariDesktop', {
     ipcRenderer.on('toggle-ui', handler);
     return () => ipcRenderer.removeListener('toggle-ui', handler);
   },
-  // キャラクター一覧の取得 / characters フォルダを開く
+  // キャラクター一覧の取得 / 作成 / characters フォルダを開く
   listCharacters: () => ipcRenderer.invoke('characters:list'),
+  createCharacter: (name, files) => ipcRenderer.invoke('characters:create', { name, files }),
   revealCharacters: () => ipcRenderer.send('characters:reveal'),
 });
