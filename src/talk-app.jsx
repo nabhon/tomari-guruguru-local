@@ -6,6 +6,7 @@ import { useAvatarLoop } from './engine/useAvatarLoop';
 import { useMouseDirection } from './drivers/mouseDirection';
 import { useAudioMouth } from './drivers/audioMouth';
 import { useBlinkTimer } from './drivers/blinkTimer';
+import { useFaceTracking } from './drivers/faceTracking';
 
 const { useState, useRef, useMemo, useEffect } = React;
 
@@ -20,7 +21,14 @@ const TALK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "thHalf": 0.07,
   "thFull": 0.2,
   "release": 0.12,
-  "autoBlink": true
+  "autoBlink": true,
+  "faceSensitivity": 2.5,
+  "faceInvertX": true,
+  "faceInvertY": false,
+  "mouthFromFace": false,
+  "blinkFromFace": false,
+  "jawHalf": 0.15,
+  "jawFull": 0.4
 }/*EDITMODE-END*/;
 
 // クロマキー用の単色プリセット（緑 / 青 / マゼンタ）
@@ -52,16 +60,27 @@ function App() {
   const tweaksRef = useRef(t);
   tweaksRef.current = t;
 
-  // 方向: マウス追従、口: 音声、まばたき: タイマー（autoBlink で開閉）
-  useMouseDirection({ charRef, tweaksRef, targetRef: target });
+  // 入力ソース: 方向＝マウス／顔、口＝音声／顔、まばたき＝タイマー／顔。
+  // 顔カメラが ON の間は顔が方向を握り、マウスは書き込みを止める。
   const audio = useAudioMouth(meterRef);
-  const blink = useBlinkTimer(t.autoBlink);
+  const face = useFaceTracking({ tweaksRef, targetRef: target });
+  const mouseEnabled = useRef(true);
+  mouseEnabled.current = !face.cameraOn;
+  useMouseDirection({ charRef, tweaksRef, targetRef: target, enabledRef: mouseEnabled });
 
-  // メインループ1本で 追従 + 音声→口段階 を回す
+  // 口・まばたきは「顔から」かつカメラONのときだけ顔ソースへ切替（OFF時は従来どおり）
+  const faceBlink = t.blinkFromFace && face.cameraOn;
+  const timerBlink = useBlinkTimer(t.autoBlink && !faceBlink);
+  const blink = faceBlink ? face.blink : timerBlink;
+
+  // メインループ1本で 追従 + 口段階（音声 or 顔）を回す
   useAvatarLoop({
     tweaksRef, targetRef: target, rows: ROWS, cols: COLS,
     onCell: setCell,
-    onFrame: (now, tw) => { const m = audio.frame(now, tw); if (m != null) setMouth(m); },
+    onFrame: (now, tw) => {
+      const m = (tw.mouthFromFace && face.cameraOn) ? face.frameMouth(now, tw) : audio.frame(now, tw);
+      if (m != null) setMouth(m);
+    },
   });
 
   // UI 表示/非表示トグル: F9（web/desktop 共通）＋ Electron の 表示メニュー
@@ -113,6 +132,9 @@ function App() {
         ))}
       </div>
 
+      {/* 顔追跡用の隠し映像。UI 非表示中も追跡を続けるため hideUI の外に置く。 */}
+      <video ref={face.videoRef} muted playsInline style={{ display: 'none' }}></video>
+
       {!hideUI && (<>
       <div style={{ position: 'absolute', top: '3.5vh', left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
         <div style={{ fontSize: 'clamp(18px, 2.4vmin, 26px)', fontWeight: 700, color: inkColor, letterSpacing: '0.18em' }}>トマリトーク</div>
@@ -154,6 +176,23 @@ function App() {
           <input type="file" accept="audio/*" onChange={audio.onFilePick} style={{ display: 'none' }}></input>
         </label>
 
+        <button onClick={() => (face.cameraOn ? face.stop() : face.start())} style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontFamily: 'inherit', fontWeight: 700, fontSize: 14,
+          color: face.cameraOn ? '#fff' : inkColor,
+          background: face.cameraOn ? '#4F86D9' : 'transparent',
+          border: `1.5px solid ${face.cameraOn ? '#4F86D9' : lineColor}`,
+          borderRadius: 12, padding: '9px 16px', cursor: 'pointer',
+          minHeight: 44
+        }}>
+          <span style={{
+            width: 9, height: 9, borderRadius: '50%',
+            background: face.cameraOn ? '#fff' : '#4F86D9',
+            animation: face.cameraOn ? 'pulse 1.2s ease-in-out infinite' : 'none'
+          }}></span>
+          {face.cameraOn ? '顔カメラ停止' : '顔カメラ開始'}
+        </button>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 150 }}>
           <div style={{ fontSize: 11, color: subColor, letterSpacing: '0.06em', display: 'flex', justifyContent: 'space-between' }}>
             <span>音量</span>
@@ -171,6 +210,12 @@ function App() {
       </div>
       {audio.micErr ? (
         <div style={{ position: 'absolute', bottom: 92, left: '50%', transform: 'translateX(-50%)', color: '#B3261E', fontSize: 13, fontWeight: 700 }}>{audio.micErr}</div>
+      ) : null}
+      {face.error ? (
+        <div style={{ position: 'absolute', bottom: 116, left: '50%', transform: 'translateX(-50%)', color: '#B3261E', fontSize: 13, fontWeight: 700 }}>{face.error}</div>
+      ) : null}
+      {face.cameraOn ? (
+        <div style={{ position: 'absolute', bottom: 92, left: '50%', transform: 'translateX(-50%)', color: subColor, fontSize: 12 }}>顔追跡は端末内だけで処理されます（送信なし）</div>
       ) : null}
       <audio ref={audio.audioElRef} controls style={{
         position: 'absolute', bottom: 20, right: 20, width: 260,
@@ -206,6 +251,22 @@ function App() {
           onChange={(v) => setTweak('chromaColor', v)}></TweakColor>
         <TweakToggle label="Hide UI (F9)" value={hideUI}
           onChange={(v) => setHideUI(v)}></TweakToggle>
+        <TweakSection label="Face camera"></TweakSection>
+        <TweakSlider label="Head sensitivity" value={t.faceSensitivity} min={1} max={6} step={0.1}
+          onChange={(v) => setTweak('faceSensitivity', v)}></TweakSlider>
+        <TweakToggle label="Mirror (left/right)" value={t.faceInvertX}
+          onChange={(v) => setTweak('faceInvertX', v)}></TweakToggle>
+        <TweakToggle label="Invert vertical" value={t.faceInvertY}
+          onChange={(v) => setTweak('faceInvertY', v)}></TweakToggle>
+        <TweakButton label="Calibrate (look straight)" onClick={face.calibrate}></TweakButton>
+        <TweakToggle label="Mouth from face (jaw)" value={t.mouthFromFace}
+          onChange={(v) => setTweak('mouthFromFace', v)}></TweakToggle>
+        <TweakSlider label="Jaw threshold (half)" value={t.jawHalf} min={0.05} max={0.6} step={0.01}
+          onChange={(v) => setTweak('jawHalf', v)}></TweakSlider>
+        <TweakSlider label="Jaw threshold (full)" value={t.jawFull} min={0.1} max={0.9} step={0.01}
+          onChange={(v) => setTweak('jawFull', v)}></TweakSlider>
+        <TweakToggle label="Blink from face" value={t.blinkFromFace}
+          onChange={(v) => setTweak('blinkFromFace', v)}></TweakToggle>
       </TweaksPanel>
       </>)}
     </div>

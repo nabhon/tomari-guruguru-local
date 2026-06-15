@@ -5,6 +5,15 @@ const DIST = 'dist';
 const BASE = '/tomari-guruguru/';
 const HTML_FILES = ['index.html', 'talk.html'];
 const SHEETS = ['A', 'B', 'C', 'D', 'E', 'F'];
+// 顔追跡(Cycle 3)で同梱する MediaPipe アセット。欠けるとブラウザ実行時に初めて
+// 壊れるので、デプロイ前に存在を保証する。
+const MEDIAPIPE_FILES = [
+  'mediapipe/face_landmarker.task',
+  'mediapipe/wasm/vision_wasm_internal.js',
+  'mediapipe/wasm/vision_wasm_internal.wasm',
+  'mediapipe/wasm/vision_wasm_nosimd_internal.js',
+  'mediapipe/wasm/vision_wasm_nosimd_internal.wasm',
+];
 
 function fail(message) {
   console.error(`Pages build verification failed: ${message}`);
@@ -70,5 +79,9 @@ for (const file of HTML_FILES) {
 }
 
 assertSliceImages();
+
+for (const rel of MEDIAPIPE_FILES) {
+  assertFile(join(DIST, ...rel.split('/')));
+}
 
 console.log('Pages build verification passed.');

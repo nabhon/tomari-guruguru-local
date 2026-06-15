@@ -11,6 +11,7 @@
     "build": "vite build",
     "preview": "vite preview --base /tomari-guruguru/",
     "verify:pages": "node scripts/verify-pages-build.mjs",
+    "setup:mediapipe": "node scripts/fetch-mediapipe.mjs",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:5173 && electron .\"",
     "build:desktop": "vite build --mode electron",
     "dist": "npm run build:desktop && electron-builder"
@@ -19,6 +20,7 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.20",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

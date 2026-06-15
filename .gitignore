@@ -12,5 +12,6 @@ dist/
 release/
 public/*
 !public/slices2/
+!public/mediapipe/
 .DS_Store
 Thumbs.db

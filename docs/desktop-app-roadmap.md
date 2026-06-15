@@ -2,7 +2,7 @@
 
 Plan for evolving トマリトーク from a browser page into a streaming/meeting-ready desktop avatar app. Three cycles, each independently shippable.
 
-Status: Cycle 0 (driver refactor), Cycle 1 (Electron), and Cycle 2a (greenscreen + hide-UI) are **done**; the mouse-follow-only "ぐるぐる" mode was removed, leaving トマリトーク as the only app. Cycle 3 (face tracking) is next; Cycle 2b (native virtual camera) stays deferred.
+Status: Cycle 0 (driver refactor), Cycle 1 (Electron), Cycle 2a (greenscreen + hide-UI), and Cycle 3 (webcam face tracking) are **done** — all planned cycles complete. The mouse-follow-only "ぐるぐる" mode was removed, leaving トマリトーク as the only app. Cycle 2b (native virtual camera) and 2c (NDI) remain deferred/stretch.
 
 ---
 
@@ -105,27 +105,22 @@ demanded. 2c (NDI) stays a stretch.
 
 ---
 
-## Cycle 3 — Webcam face tracking
+## Cycle 3 — Webcam face tracking — **DONE**
 
 Drive the character's head direction (and optionally mouth + blink) from the user's face instead of the mouse.
 
-### Approach
-- Use **MediaPipe Tasks Vision — FaceLandmarker** (WASM, runs in the renderer, no server). It provides:
-  - `facialTransformationMatrix` → derive **head yaw/pitch** → feed the existing `{x,y}` → 5×5 grid mapping (this is exactly the Cycle 0 "direction driver" interface — mouse swaps out for face).
-  - **Blendshapes** as a bonus: `jawOpen` → mouth stage (alternative/supplement to audio), `eyeBlinkLeft/Right` → blink driver. This unifies talk-app behavior with real facial expression.
-- Reuse the existing **smoothing** tweak for the head-pose lerp; add a **neutral/center calibration** ("look straight ahead, click to zero") and a **sensitivity** tweak so a small head turn can reach full left/right.
+### Resolved approach
+- **MediaPipe Tasks Vision — `FaceLandmarker`** (WASM, runs in the renderer, fully local — no server), in **`src/drivers/faceTracking.js`**. One camera + one detection loop backs all three Cycle 0 channels (exactly the "FaceSource" `types.js` anticipated):
+  - `facialTransformationMatrix` → head **yaw/pitch** → writes `targetRef.current = {x,y}`, identical to the mouse driver; `useAvatarLoop` smoothing + 5×5 grid mapping are untouched.
+  - Blendshapes: `jawOpen` → `frameMouth(now,tw)` (same shape/debounce as `audioMouth`), `eyeBlink{Left,Right}` → blink boolean (with hysteresis).
+- **Direction is always-on** when the camera is running; **mouth-from-face** and **blink-from-face** are independent opt-in toggles (mic + timer remain the defaults). The mouse driver gained an `enabledRef` and stops writing while the camera is on.
+- **Calibration** ("look straight" → captures neutral; auto-captured on the first frame too) + **sensitivity** + **mirror/invert** tweaks. Throttled ~30fps inference (`requestVideoFrameCallback`); graceful fallback to mouse on permission/camera failure.
+- **Assets bundled** under `public/mediapipe/` (WASM + `face_landmarker.task`, ~25 MB) via `scripts/fetch-mediapipe.mjs` (`npm run setup:mediapipe`), loaded with `import.meta.env.BASE_URL` so dev/Pages/electron all resolve. MediaPipe is **dynamically imported** (own lazy chunk; main bundle barely grows). `verify:pages` asserts the assets exist. Electron's existing `'media'` permission grant covers the camera — no change.
 
-### Tasks
-- [ ] Add MediaPipe FaceLandmarker, camera selection UI, start/stop
-- [ ] Head pose → direction driver (yaw→x, pitch→y), calibration + sensitivity tweaks
-- [ ] Optional: jawOpen → mouth driver; eyeBlink → blink driver (toggle in Tweaks)
-- [ ] Input-source switch in UI: mouse / face
-- [ ] Graceful fallback to mouse if no camera / permission denied
-
-### Risks / notes
-- **Camera contention**: the *input* tracking webcam and the Cycle 2 *output* virtual camera are different devices, so they don't conflict — but watch CPU (face inference + canvas streaming together).
-- Lighting/latency: needs smoothing + a sensible inference rate (don't run at full FPS if costly).
-- Privacy: tracking is fully local (WASM); state that clearly in UI.
+### Notes
+- **No camera contention** with Cycle 2: that path is OBS *Window Capture* of the app window, not a webcam, so the tracking webcam is the only camera in use.
+- Privacy: inference is fully local (WASM); the UI states "顔追跡は端末内だけで処理されます（送信なし）".
+- The camera starts **off** every launch (no auto-grab); calibration neutral is per-session.
 
 ---
 
@@ -134,7 +129,7 @@ Drive the character's head direction (and optionally mouth + blink) from the use
 1. **Cycle 0** (small refactor) — unlocks clean plug-in points.
 2. **Cycle 1** (Electron) — needed before any virtual-camera/native work; also fixes tweak persistence.
 3. **Cycle 2a** (greenscreen + hide-UI) — **done**. Fast, high value for streamers *and* meetings (via OBS Virtual Camera).
-4. **Cycle 3** (face tracking) — independent; the last planned cycle. **Next up.**
+4. **Cycle 3** (face tracking) — **done**. The last planned cycle; all four are complete.
 5. **Cycle 2b** (real virtual camera) — *deferred*, not scheduled. Revisit only if a no-OBS meeting-webcam workflow is demanded.
 
 Each cycle ends shippable. The existing web (GitHub Pages) build should keep working throughout.
