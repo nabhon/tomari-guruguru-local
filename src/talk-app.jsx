@@ -8,7 +8,7 @@ import { useAudioMouth } from './drivers/audioMouth';
 import { useBlinkTimer } from './drivers/blinkTimer';
 import { useFaceTracking } from './drivers/faceTracking';
 
-const { useState, useRef, useMemo, useEffect } = React;
+const { useState, useRef, useMemo, useEffect, useCallback } = React;
 
 const TALK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "followRange": 340,
@@ -35,11 +35,34 @@ const TALK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "faceResolution": "480",
   "faceMinDetection": 0.5,
   "faceMinPresence": 0.5,
-  "faceMinTracking": 0.5
+  "faceMinTracking": 0.5,
+  "character": "__builtin"
 }/*EDITMODE-END*/;
 
 // クロマキー用の単色プリセット（緑 / 青 / マゼンタ）
 const CHROMA_OPTIONS = ['#00B140', '#0047BB', '#FF00FF'];
+
+// 同梱の既定キャラ（静的ホストではこれのみ）。base は character-config の basePath。
+const BUILTIN_CHAR = { id: '__builtin', name: 'トマリ', base: charConfig.basePath };
+
+// キャラ一覧を三系統で解決: Electron(ブリッジ) / dev(フェッチ) / 静的(同梱のみ)。
+// 返す base: Electron='tomari-char://chars/<name>', dev='/characters/<name>', 静的=同梱。
+async function resolveCharacters() {
+  const d = typeof window !== 'undefined' ? window.tomariDesktop : null;
+  try {
+    if (d && d.listCharacters) {
+      const names = await d.listCharacters();
+      const list = names.map((n) => ({ id: n, name: n, base: `tomari-char://chars/${encodeURIComponent(n)}` }));
+      return list.length ? list : [BUILTIN_CHAR];
+    }
+    if (import.meta.env.DEV) {
+      const names = await (await fetch('/__characters')).json();
+      const list = names.map((n) => ({ id: n, name: n, base: `/characters/${encodeURIComponent(n)}` }));
+      return list.length ? list : [BUILTIN_CHAR];
+    }
+  } catch { /* 失敗時は同梱へフォールバック */ }
+  return [BUILTIN_CHAR];
+}
 
 const { rows: ROWS, cols: COLS } = charConfig;
 // シート: 目開け×口[とじ/中間/開け] = A/B/C, 目閉じ×口[とじ/中間/開け] = D/E/F
@@ -52,7 +75,6 @@ const SHEETS = [
   charConfig.sheets.eyesClosed.open,  // F
 ];
 const sheetFor = (eyesClosed, mouth) => SHEETS[(eyesClosed ? 3 : 0) + mouth];
-const SRC = (sheet, r, c) => charConfig.src(sheet, r, c);
 
 function App() {
   const [t, setTweak] = useTweaks(TALK_DEFAULTS);
@@ -61,11 +83,31 @@ function App() {
   // UI を隠してキャラだけ表示（キャプチャ用）。永続化しない＝起動時は常に表示。
   const [hideUI, setHideUI] = useState(false);
 
+  // キャラクター: 一覧（既定は同梱のみ）と現在のベースURL。
+  const [characters, setCharacters] = useState([BUILTIN_CHAR]);
+  const [charBase, setCharBase] = useState(BUILTIN_CHAR.base);
+  const [charMenuOpen, setCharMenuOpen] = useState(false);
+
   const charRef = useRef(null);
   const meterRef = useRef(null);
   const target = useRef({ x: 0, y: 0 });
   const tweaksRef = useRef(t);
   tweaksRef.current = t;
+
+  // キャラ一覧を再取得。永続化された選択を復元し、無ければ先頭にフォールバック。
+  const refreshCharacters = useCallback(async () => {
+    const list = await resolveCharacters();
+    setCharacters(list);
+    const want = list.find((c) => c.id === tweaksRef.current.character) || list[0];
+    setCharBase(want.base);
+    if (want.id !== tweaksRef.current.character) setTweak('character', want.id);
+  }, [setTweak]);
+  useEffect(() => { refreshCharacters(); }, [refreshCharacters]);
+
+  const selectCharacter = useCallback((c) => {
+    setCharBase(c.base);
+    setTweak('character', c.id);
+  }, [setTweak]);
 
   // 入力ソース: 方向＝マウス／顔、口＝音声／顔、まばたき＝タイマー／顔。
   // 顔カメラが ON の間は顔が方向を握り、マウスは書き込みを止める。
@@ -136,7 +178,7 @@ function App() {
         userSelect: 'none', touchAction: 'none'
       }}>
         {allFrames.map(({ s, r, c }) => (
-          <img key={`${s}${r}${c}`} src={SRC(s, r, c)} alt="" draggable="false" style={{
+          <img key={`${s}${r}${c}`} src={charConfig.srcFrom(charBase, s, r, c)} alt="" draggable="false" style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
             opacity: s === activeSheet && r === cell.r && c === cell.c ? 1 : 0,
             pointerEvents: 'none'
@@ -156,6 +198,50 @@ function App() {
       }}></canvas>
 
       {!hideUI && (<>
+      {/* 左サイドの開閉式キャラメニュー（チップ＝開閉ハンドル）。F9 で他チャ同様に隠れる。 */}
+      <button onClick={() => setCharMenuOpen((v) => !v)} style={{
+        position: 'absolute', left: charMenuOpen ? 220 : 0, top: '50%', transform: 'translateY(-50%)',
+        transition: 'left 0.25s ease', zIndex: 5,
+        background: panelBg, color: inkColor, border: `1px solid ${lineColor}`, borderLeft: 'none',
+        borderRadius: '0 12px 12px 0', padding: '16px 7px', cursor: 'pointer',
+        fontFamily: 'inherit', fontWeight: 700, fontSize: 12, letterSpacing: '0.15em',
+        writingMode: 'vertical-rl', backdropFilter: 'blur(10px)'
+      }}>キャラ</button>
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 220, zIndex: 4,
+        transform: charMenuOpen ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform 0.25s ease',
+        background: panelBg, borderRight: `1px solid ${lineColor}`, backdropFilter: 'blur(12px)',
+        display: 'flex', flexDirection: 'column', gap: 8, padding: 16, boxSizing: 'border-box',
+        boxShadow: '4px 0 24px rgba(60,48,38,0.10)'
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: inkColor, letterSpacing: '0.08em' }}>キャラクター</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', flex: 1 }}>
+          {characters.map((c) => {
+            const on = charBase === c.base;
+            return (
+              <button key={c.id} onClick={() => selectCharacter(c)} style={{
+                textAlign: 'left', fontFamily: 'inherit', fontWeight: 700, fontSize: 13,
+                color: on ? '#fff' : inkColor, background: on ? '#D96C4F' : 'transparent',
+                border: `1.5px solid ${on ? '#D96C4F' : lineColor}`, borderRadius: 10,
+                padding: '9px 12px', cursor: 'pointer'
+              }}>{c.name}</button>
+            );
+          })}
+        </div>
+        <button onClick={refreshCharacters} style={{
+          fontFamily: 'inherit', fontWeight: 700, fontSize: 12, color: inkColor,
+          background: 'transparent', border: `1.5px solid ${lineColor}`, borderRadius: 10,
+          padding: '8px 12px', cursor: 'pointer'
+        }}>↻ 一覧を更新</button>
+        {(typeof window !== 'undefined' && window.tomariDesktop && window.tomariDesktop.revealCharacters) ? (
+          <button onClick={() => window.tomariDesktop.revealCharacters()} style={{
+            fontFamily: 'inherit', fontWeight: 700, fontSize: 12, color: subColor,
+            background: 'transparent', border: `1.5px solid ${lineColor}`, borderRadius: 10,
+            padding: '8px 12px', cursor: 'pointer'
+          }}>📁 フォルダを開く</button>
+        ) : null}
+      </div>
+
       <div style={{ position: 'absolute', top: '3.5vh', left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
         <div style={{ fontSize: 'clamp(18px, 2.4vmin, 26px)', fontWeight: 700, color: inkColor, letterSpacing: '0.18em' }}>トマリトーク</div>
         <div style={{ fontSize: 'clamp(12px, 1.6vmin, 16px)', color: subColor, marginTop: 4, letterSpacing: '0.08em' }}>音声に合わせて口パク・まばたきするよ</div>

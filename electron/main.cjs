@@ -1,9 +1,16 @@
 // Electron メインプロセス — トマリのデスクトップ版ウィンドウ。
-const { app, BrowserWindow, Menu, ipcMain, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session, protocol, net, shell } = require('electron');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const settings = require('./settings.cjs');
+const characters = require('./characters.cjs');
 
 const DEV_URL = 'http://127.0.0.1:5173/talk.html';
+
+// キャラ画像配信用のカスタムスキーム（app ready 前に特権登録が必要）
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'tomari-char', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+]);
 
 let win = null;
 
@@ -72,12 +79,25 @@ function buildMenu() {
 ipcMain.on('tweaks:load', (e, key) => { e.returnValue = settings.getTweaks(key); });
 ipcMain.on('tweaks:save', (e, { key, edits }) => { settings.saveTweaks(key, edits); });
 
+// キャラクター一覧・フォルダを開く IPC
+ipcMain.handle('characters:list', () => characters.listCharacters());
+ipcMain.on('characters:reveal', () => { shell.openPath(characters.charactersDir()); });
+
 app.whenReady().then(() => {
   // マイク等のメディア権限を許可（口パク用 getUserMedia）
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => {
     cb(permission === 'media');
   });
   session.defaultSession.setPermissionCheckHandler((wc, permission) => permission === 'media');
+
+  // tomari-char:// → characters/ 内の実ファイルを配信
+  protocol.handle('tomari-char', (request) => {
+    const file = characters.resolveCharFile(request.url);
+    if (!file) return new Response(null, { status: 404 });
+    return net.fetch(pathToFileURL(file).toString());
+  });
+
+  characters.ensureDefaultCharacter();
 
   buildMenu();
   createWindow();

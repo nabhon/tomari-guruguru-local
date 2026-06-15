@@ -18,8 +18,14 @@ export default {
     eyesClosed: { close: 'D', half: 'E', open: 'F' },
   },
 
-  // ファイル名パターンを生成
+  // ファイル名パターンを生成（既定の同梱キャラ basePath を使用）
   src(sheet, r, c) {
-    return `${this.basePath}/${sheet}/r${r}c${c}.${this.ext}`;
+    return this.srcFrom(this.basePath, sheet, r, c);
+  },
+
+  // 任意のベースURLからフレームパスを生成。キャラ切替時にレンダラが base を差し替える。
+  //   同梱: 'slices2' / Electron: 'tomari-char://chars/<name>' / dev: '/characters/<name>'
+  srcFrom(base, sheet, r, c) {
+    return `${base}/${sheet}/r${r}c${c}.${this.ext}`;
   },
 };
