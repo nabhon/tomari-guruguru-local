@@ -181,12 +181,11 @@ const __TWEAKS_STYLE = `
 // Single source of truth for tweak values. setTweak persists via the host
 // (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
 // Desktop (Electron) persistence bridge — exposed by preload as window.tomariDesktop.
-// When present, tweaks load from / save to an on-disk store keyed per page
-// ('talk' vs 'guruguru'). When absent (web/host), behaviour is unchanged: the
-// host rewrites the EDITMODE block via the postMessage protocol below.
+// When present, tweaks load from / save to an on-disk store under the 'talk' key.
+// When absent (web/host), behaviour is unchanged: the host rewrites the EDITMODE
+// block via the postMessage protocol below.
 const __desktop = typeof window !== 'undefined' ? window.tomariDesktop : null;
-const __tweakKey = typeof location !== 'undefined' && /guruguru/.test(location.pathname)
-  ? 'guruguru' : 'talk';
+const __tweakKey = 'talk';
 
 function useTweaks(defaults) {
   const [values, setValues] = React.useState(() => (

@@ -1,5 +1,5 @@
 // 共有ヘルパー — 入力ソースに依存しない純粋関数
-// app.jsx / talk-app.jsx の重複ロジックをここに集約
+// talk-app.jsx と各ドライバから参照される
 
 // 値を [a, b] にクランプ
 export function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }

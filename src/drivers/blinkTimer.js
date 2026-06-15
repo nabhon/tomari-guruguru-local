@@ -2,7 +2,7 @@ import React from 'react';
 
 // BlinkSource: 自動まばたき（自然なゆらぎ: 不規則な間隔 + 二度瞬き + ゆっくり瞬き）。
 // enabled=false の間は瞬きを止めて目を開けたままにする。
-// guruguru は常時 true、talk は t.autoBlink を渡す。
+// talk-app は t.autoBlink を渡す。
 export function useBlinkTimer(enabled) {
   const [blink, setBlink] = React.useState(false);
   React.useEffect(() => {

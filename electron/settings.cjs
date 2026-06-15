@@ -1,5 +1,5 @@
 // 設定の永続化 — userData/settings.json への極小 JSON ストア（外部依存なし）。
-// 形: { talk: {...}, guruguru: {...}, window: { bounds } }
+// 形: { talk: {...}, window: { bounds } }
 const { app } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -28,7 +28,7 @@ function persist() {
   }
 }
 
-// tweak チャンネル（'talk' / 'guruguru'）の保存値を返す
+// tweak チャンネル（'talk'）の保存値を返す
 function getTweaks(key) {
   return load()[key] || {};
 }

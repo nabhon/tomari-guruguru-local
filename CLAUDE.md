@@ -4,19 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A browser avatar for the character "Tomari". Two apps share one engine:
-- **トマリぐるぐる** (`guruguru.html` / `src/app.jsx`) — character turns to follow the mouse across 25 directions.
-- **トマリトーク** (`talk.html` / `src/talk-app.jsx`) — adds mic/audio-file driven lip-sync on top of mouse-following.
+**トマリトーク** (`talk.html` / `src/talk-app.jsx`) — a browser/desktop avatar for the character "Tomari" that turns to follow the mouse across 25 directions and lip-syncs (mic or audio file) with auto-blink.
 
-Pure frontend, no backend. Vite multi-page build, deployed to GitHub Pages.
+Frontend (React + Vite), deployed to GitHub Pages, and also packaged as a Windows desktop app via Electron (`electron/`). No backend. (A second mouse-follow-only "ぐるぐる" mode was removed; the `guruguru` name survives only in the repo name and the `/tomari-guruguru/` Pages base path.)
 
 ## Commands
 
 ```bash
 npm run dev          # dev server at http://127.0.0.1:5173 (auto-opens /talk.html)
-npm run build        # vite build → dist/
+npm run build        # vite build → dist/ (Pages target, base /tomari-guruguru/)
 npm run preview      # serve dist/ at the Pages base path /tomari-guruguru/ (port 4173)
 npm run verify:pages # validate dist/ against Pages expectations (run after build)
+npm run electron:dev # run the Electron app against the dev server
+npm run build:desktop# vite build --mode electron (base './' for file://)
+npm run dist         # build:desktop + electron-builder → portable .exe in release/
 ```
 
 There are no tests and no linter. `npm run verify:pages` (see `scripts/verify-pages-build.mjs`) is the closest thing to a test — it asserts the built HTML uses the `/tomari-guruguru/` base path (not root `/assets/`), that referenced assets exist, and that each of the 6 sheets (`A`–`F`) under `dist/slices2/` contains exactly 25 `.webp` files. CI (`.github/workflows/pages.yml`) runs `build` then `verify:pages` on every PR/push to `main`; deploy only happens on `main`.
@@ -25,22 +26,28 @@ Node ^20.19 or >=22.12 is required (Vite 8 constraint). Mic input only works on 
 
 ## Architecture
 
-**Multi-page Vite app.** `vite.config.js` declares three HTML inputs (`index.html`, `guruguru.html`, `talk.html`). `index.html` is just a meta-refresh redirect to `talk.html`. The `base` is `/` in dev but `/tomari-guruguru/` in `build` — never hardcode asset paths; rely on Vite's base resolution and reference public assets relatively.
+**Multi-page Vite app.** `vite.config.js` declares two HTML inputs (`index.html`, `talk.html`); `index.html` is just a meta-refresh redirect to `talk.html`. `base` is `/` in dev, `/tomari-guruguru/` for the Pages `build`, and `./` for `--mode electron` (file://) — never hardcode asset paths; rely on Vite's base resolution and reference public assets relatively.
 
-**The two apps load two module scripts, in order:** `src/tweaks-panel.jsx` then the app. This ordering is load-bearing — `tweaks-panel.jsx` defines the Tweaks UI components and `useTweaks`, then assigns them onto `window` (`Object.assign(window, {...})`). `app.jsx`/`talk-app.jsx` use `TweaksPanel`, `useTweaks`, `TweakSlider`, etc. as **globals without importing them**. If you add a Tweak control or rename one, update the `window` export list at the bottom of `tweaks-panel.jsx`.
+**`talk.html` loads two module scripts, in order:** `src/tweaks-panel.jsx` then `src/talk-app.jsx`. This ordering is load-bearing — `tweaks-panel.jsx` defines the Tweaks UI components and `useTweaks`, then assigns them onto `window` (`Object.assign(window, {...})`). `talk-app.jsx` uses `TweaksPanel`, `useTweaks`, `TweakSlider`, etc. as **globals without importing them**. If you add a Tweak control or rename one, update the `window` export list at the bottom of `tweaks-panel.jsx`.
+
+**Behavior is split into pluggable drivers (Cycle 0 refactor).** `src/talk-app.jsx` composes input *sources* over a shared loop rather than hardcoding them: `src/engine/useAvatarLoop.js` runs the single `requestAnimationFrame` loop (smooth target → grid cell, plus an `onFrame` seam); `src/drivers/mouseDirection.js` (pointer → direction), `src/drivers/audioMouth.js` (`useAudioMouth` — audio → mouth stage), `src/drivers/blinkTimer.js` (timer → blink). `src/engine/shared.js` holds `clamp`/`cellFromXY`/`themeColors`/`BG_OPTIONS`. `src/drivers/types.js` documents the source contract (a future face-tracking source can back multiple channels).
 
 **`src/character-config.js` is the single source of truth for character art.** It maps a sheet letter + (row, col) to an image path via `src(sheet, r, c)` → `slices2/<sheet>/r<r>c<c>.webp`. The 25 directions are a 5×5 grid (`r0`=look up … `r4`=look down; `c0`=left … `c4`=right). The 6 sheets are eye×mouth combinations: `A`/`B`/`C` = eyes open with mouth closed/half/open, `D`/`E`/`F` = eyes closed with the same mouth states. To swap characters, regenerate the slices and adjust `basePath`/`ext` here only.
 
-**Rendering approach (both apps):** all frames for the current state are rendered as stacked absolutely-positioned `<img>`s; only the active one has `opacity: 1`. This preloads every frame so direction/mouth changes are instant with no flicker. A `requestAnimationFrame` loop smooths mouse target → grid cell. Auto-blink is a self-scheduling `setTimeout` chain with randomized intervals (single/double/slow blinks).
+**Rendering approach:** all frames for the current state are rendered as stacked absolutely-positioned `<img>`s; only the active one has `opacity: 1`. This preloads every frame so direction/mouth changes are instant with no flicker. Auto-blink is a self-scheduling `setTimeout` chain with randomized intervals (single/double/slow blinks) in `blinkTimer.js`.
 
-**talk-app audio engine** (`makeAudioEngine` in `src/talk-app.jsx`): a Web Audio `AnalyserContext` computes RMS level from mic and/or an `<audio>` element; the level (after gain + asymmetric attack/release envelope) is thresholded into 3 mouth stages (`thHalf`, `thFull`). Mouth switching is debounced (~70ms) to avoid jitter.
+**Audio engine** (`makeAudioEngine` / `useAudioMouth` in `src/drivers/audioMouth.js`): a Web Audio analyser computes RMS level from mic and/or an `<audio>` element; the level (after gain + asymmetric attack/release envelope) is thresholded into 3 mouth stages (`thHalf`, `thFull`). Mouth switching is debounced (~70ms) to avoid jitter. The loop calls `useAudioMouth().frame(now, tw)` via `useAvatarLoop`'s `onFrame`.
 
 ### The Tweaks panel / EDITMODE protocol
 
 The floating "Tweaks" panel is a generic harness scaffold, not bespoke to this project. Two non-obvious things:
 
-- Each app's tweak defaults live in a `/*EDITMODE-BEGIN*/{ ... }/*EDITMODE-END*/` JSON block. `setTweak` posts `__edit_mode_set_keys` to `window.parent`, and an external host is expected to rewrite that on-disk JSON block to persist changes. In a plain `npm run dev` session there is no such host, so tweak changes are in-memory only and reset on reload. Keep the block as valid JSON literal and keep the markers intact.
+- Tweak defaults live in a `/*EDITMODE-BEGIN*/{ ... }/*EDITMODE-END*/` JSON block in `talk-app.jsx`. Persistence in `useTweaks` is bridge-aware: in the **Electron** build it loads/saves via `window.tomariDesktop` (preload → `userData/settings.json`, key `'talk'`); otherwise it falls back to posting `__edit_mode_set_keys` to `window.parent` for an external host. In a plain `npm run dev` browser session there is no host, so changes are in-memory only and reset on reload. Keep the block as valid JSON literal and keep the markers intact.
 - `tweaks-panel.jsx` carries an `@ds-adherence-ignore` marker and uses raw hex/px by design — don't "fix" its styling to a design system.
+
+### Desktop (Electron)
+
+`electron/main.cjs` (window + media-permission handler + always-on-top menu + window-bounds persistence), `electron/preload.cjs` (exposes `window.tomariDesktop` tweak bridge), `electron/settings.cjs` (dependency-free JSON store in `userData`). Main is CommonJS (`.cjs`) on purpose. Dev loads the Vite server URL; packaged loads `dist/talk.html` over `file://` (all asset/nav paths are relative, so this works). The Pages build (`npm run build`) and `verify:pages` are a separate target from `build:desktop` — don't run `verify:pages` against the `--mode electron` output (it uses `base: './'` and would fail the Pages assertions).
 
 ## Character asset pipeline
 

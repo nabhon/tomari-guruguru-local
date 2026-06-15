@@ -15,7 +15,6 @@ export default defineConfig(({ command, mode }) => ({
     rollupOptions: {
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
-        guruguru: resolve(import.meta.dirname, 'guruguru.html'),
         talk: resolve(import.meta.dirname, 'talk.html'),
       },
     },

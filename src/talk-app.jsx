@@ -153,11 +153,6 @@ function App() {
         display: audio.fileName ? 'block' : 'none', cursor: 'default'
       }}></audio>
 
-      <a href="guruguru.html" style={{
-        position: 'absolute', top: 18, left: 18, fontSize: 13, fontWeight: 700,
-        color: subColor, textDecoration: 'none', letterSpacing: '0.06em'
-      }}>← ぐるぐる版</a>
-
       <TweaksPanel>
         <TweakSection label="Lip sync"></TweakSection>
         <TweakSlider label="Mic sensitivity" value={t.micGain} min={0.3} max={5} step={0.1}

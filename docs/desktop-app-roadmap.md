@@ -1,8 +1,8 @@
 # Desktop App Roadmap
 
-Plan for evolving トマリぐるぐる / トマリトーク from a browser page into a streaming/meeting-ready desktop avatar app. Three cycles, each independently shippable.
+Plan for evolving トマリトーク from a browser page into a streaming/meeting-ready desktop avatar app. Three cycles, each independently shippable.
 
-Status: **planning** (nothing below is implemented yet).
+Status: Cycle 0 (driver refactor) and Cycle 1 (Electron) are **done**; the mouse-follow-only "ぐるぐる" mode was subsequently removed, leaving トマリトーク as the only app. Cycle 2a is next.
 
 ---
 
@@ -33,7 +33,7 @@ Wrap the existing Vite multi-page app in Electron and ship installable builds.
 
 ### Approach
 - Add Electron + a Vite-aware build setup. Recommended: **electron-vite** (purpose-built for Vite + Electron, handles main/preload/renderer) plus **electron-builder** for packaging. Avoid hand-rolling the dev/prod URL loading.
-- Main process creates a `BrowserWindow` loading `talk.html` (default), with a menu/tray to switch to `guruguru.html`.
+- Main process creates a `BrowserWindow` loading `talk.html` (the only page).
 - Dev mode loads the Vite dev server URL; production loads the built `dist/`. The current `base: '/tomari-guruguru/'` is for GitHub Pages — Electron loads from `file://` or a custom protocol, so base handling needs a conditional (likely `base: './'` for the Electron build target).
 
 ### Win: fix tweak persistence
