@@ -159,26 +159,26 @@ function App() {
       }}>← ぐるぐる版</a>
 
       <TweaksPanel>
-        <TweakSection label="口パク"></TweakSection>
-        <TweakSlider label="マイク感度" value={t.micGain} min={0.3} max={5} step={0.1}
+        <TweakSection label="Lip sync"></TweakSection>
+        <TweakSlider label="Mic sensitivity" value={t.micGain} min={0.3} max={5} step={0.1}
           onChange={(v) => setTweak('micGain', v)}></TweakSlider>
-        <TweakSlider label="しきい値（はんびらき）" value={t.thHalf} min={0.01} max={0.3} step={0.005}
+        <TweakSlider label="Threshold (half open)" value={t.thHalf} min={0.01} max={0.3} step={0.005}
           onChange={(v) => setTweak('thHalf', v)}></TweakSlider>
-        <TweakSlider label="しきい値（ぜんかい）" value={t.thFull} min={0.05} max={0.4} step={0.005}
+        <TweakSlider label="Threshold (full open)" value={t.thFull} min={0.05} max={0.4} step={0.005}
           onChange={(v) => setTweak('thFull', v)}></TweakSlider>
-        <TweakSlider label="口を閉じる速さ" value={t.release} min={0.03} max={0.4} step={0.01}
+        <TweakSlider label="Mouth close speed" value={t.release} min={0.03} max={0.4} step={0.01}
           onChange={(v) => setTweak('release', v)}></TweakSlider>
-        <TweakToggle label="自動まばたき" value={t.autoBlink}
+        <TweakToggle label="Auto blink" value={t.autoBlink}
           onChange={(v) => setTweak('autoBlink', v)}></TweakToggle>
-        <TweakSection label="動き"></TweakSection>
-        <TweakSlider label="追従範囲" value={t.followRange} min={120} max={1200} step={10} unit="px"
+        <TweakSection label="Motion"></TweakSection>
+        <TweakSlider label="Follow range" value={t.followRange} min={120} max={1200} step={10} unit="px"
           onChange={(v) => setTweak('followRange', v)}></TweakSlider>
-        <TweakSlider label="追従速度" value={t.smoothing} min={0.04} max={0.5} step={0.01}
+        <TweakSlider label="Follow speed" value={t.smoothing} min={0.04} max={0.5} step={0.01}
           onChange={(v) => setTweak('smoothing', v)}></TweakSlider>
-        <TweakSection label="見た目"></TweakSection>
-        <TweakSlider label="キャラサイズ" value={t.charSize} min={30} max={92} unit="vmin"
+        <TweakSection label="Appearance"></TweakSection>
+        <TweakSlider label="Character size" value={t.charSize} min={30} max={92} unit="vmin"
           onChange={(v) => setTweak('charSize', v)}></TweakSlider>
-        <TweakColor label="背景色" value={t.bgColor} options={BG_OPTIONS}
+        <TweakColor label="Background" value={t.bgColor} options={BG_OPTIONS}
           onChange={(v) => setTweak('bgColor', v)}></TweakColor>
       </TweaksPanel>
     </div>

@@ -2,8 +2,10 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/tomari-guruguru/' : '/',
+export default defineConfig(({ command, mode }) => ({
+  // mode 'electron' → 相対パス（file:// で動かすデスクトップ版）
+  // 通常の build → GitHub Pages のベースパス / dev → ルート
+  base: mode === 'electron' ? './' : command === 'build' ? '/tomari-guruguru/' : '/',
   plugins: [react()],
   server: {
     host: '127.0.0.1',

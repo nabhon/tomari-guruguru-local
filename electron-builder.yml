@@ -1,0 +1,11 @@
+appId: com.tomari.guruguru
+productName: トマリ
+directories:
+  output: release
+files:
+  - dist/**
+  - electron/**
+  - package.json
+win:
+  target: portable
+# アイコン未指定（electron-builder の既定アイコン）。後で .ico を追加可能。

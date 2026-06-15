@@ -128,18 +128,18 @@ function App() {
       ) : null}
 
       <TweaksPanel>
-        <TweakSection label="動き"></TweakSection>
-        <TweakSlider label="追従範囲" value={t.followRange} min={120} max={1200} step={10} unit="px"
+        <TweakSection label="Motion"></TweakSection>
+        <TweakSlider label="Follow range" value={t.followRange} min={120} max={1200} step={10} unit="px"
           onChange={(v) => setTweak('followRange', v)}></TweakSlider>
-        <TweakSlider label="追従速度" value={t.smoothing} min={0.04} max={0.5} step={0.01}
+        <TweakSlider label="Follow speed" value={t.smoothing} min={0.04} max={0.5} step={0.01}
           onChange={(v) => setTweak('smoothing', v)}></TweakSlider>
-        <TweakSection label="見た目"></TweakSection>
-        <TweakSlider label="キャラサイズ" value={t.charSize} min={30} max={92} unit="vmin"
+        <TweakSection label="Appearance"></TweakSection>
+        <TweakSlider label="Character size" value={t.charSize} min={30} max={92} unit="vmin"
           onChange={(v) => setTweak('charSize', v)}></TweakSlider>
-        <TweakColor label="背景色" value={t.bgColor} options={BG_OPTIONS}
+        <TweakColor label="Background" value={t.bgColor} options={BG_OPTIONS}
           onChange={(v) => setTweak('bgColor', v)}></TweakColor>
-        <TweakSection label="デバッグ"></TweakSection>
-        <TweakToggle label="グリッド表示" value={t.showDebug}
+        <TweakSection label="Debug"></TweakSection>
+        <TweakToggle label="Show grid" value={t.showDebug}
           onChange={(v) => setTweak('showDebug', v)}></TweakToggle>
       </TweaksPanel>
     </div>

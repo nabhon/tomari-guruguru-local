@@ -1,0 +1,11 @@
+// レンダラに最小の永続化ブリッジを公開する。
+// useTweaks（src/tweaks-panel.jsx）が window.tomariDesktop の有無で
+// 保存先を切り替える。ブリッジが無ければ従来の postMessage 経路のまま。
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('tomariDesktop', {
+  // 起動時に一度だけ同期で読む（小さなオブジェクト）
+  loadTweaks: (key) => ipcRenderer.sendSync('tweaks:load', key),
+  // 変更のたびに差分を送る（fire-and-forget）
+  saveTweaks: (key, edits) => ipcRenderer.send('tweaks:save', { key, edits }),
+});

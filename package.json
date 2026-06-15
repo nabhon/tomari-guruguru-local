@@ -2,12 +2,18 @@
   "name": "tomari-guruguru",
   "private": true,
   "version": "1.0.0",
+  "description": "マウス追従・口パク・まばたきするトマリ用ブラウザ/デスクトップアバター",
+  "author": "NetCaffe",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --base /tomari-guruguru/",
-    "verify:pages": "node scripts/verify-pages-build.mjs"
+    "verify:pages": "node scripts/verify-pages-build.mjs",
+    "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:5173 && electron .\"",
+    "build:desktop": "vite build --mode electron",
+    "dist": "npm run build:desktop && electron-builder"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
@@ -18,6 +24,10 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.2",
-    "vite": "^8.0.16"
+    "concurrently": "^9.1.2",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "vite": "^8.0.16",
+    "wait-on": "^8.0.1"
   }
 }

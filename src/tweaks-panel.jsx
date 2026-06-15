@@ -180,8 +180,18 @@ const __TWEAKS_STYLE = `
 // ── useTweaks ───────────────────────────────────────────────────────────────
 // Single source of truth for tweak values. setTweak persists via the host
 // (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+// Desktop (Electron) persistence bridge — exposed by preload as window.tomariDesktop.
+// When present, tweaks load from / save to an on-disk store keyed per page
+// ('talk' vs 'guruguru'). When absent (web/host), behaviour is unchanged: the
+// host rewrites the EDITMODE block via the postMessage protocol below.
+const __desktop = typeof window !== 'undefined' ? window.tomariDesktop : null;
+const __tweakKey = typeof location !== 'undefined' && /guruguru/.test(location.pathname)
+  ? 'guruguru' : 'talk';
+
 function useTweaks(defaults) {
-  const [values, setValues] = React.useState(defaults);
+  const [values, setValues] = React.useState(() => (
+    __desktop ? { ...defaults, ...(__desktop.loadTweaks(__tweakKey) || {}) } : defaults
+  ));
   // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
   // useState-style call doesn't write a "[object Object]" key into the persisted
   // JSON block.
@@ -189,7 +199,8 @@ function useTweaks(defaults) {
     const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
       ? keyOrEdits : { [keyOrEdits]: val };
     setValues((prev) => ({ ...prev, ...edits }));
-    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+    if (__desktop) __desktop.saveTweaks(__tweakKey, edits);
+    else window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
     // Same-window signal so in-page listeners (deck-stage rail thumbnails)
     // can react — the parent message only reaches the host, not peers.
     window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
