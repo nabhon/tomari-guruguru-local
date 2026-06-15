@@ -36,6 +36,8 @@ Node ^20.19 or >=22.12 is required (Vite 8 constraint). Mic input only works on 
 
 **Rendering approach:** all frames for the current state are rendered as stacked absolutely-positioned `<img>`s; only the active one has `opacity: 1`. This preloads every frame so direction/mouth changes are instant with no flicker. Auto-blink is a self-scheduling `setTimeout` chain with randomized intervals (single/double/slow blinks) in `blinkTimer.js`.
 
+**Capture output (Cycle 2a):** the `greenscreen`/`chromaColor` tweaks paint a solid chroma background (for OBS Chroma Key), and an ephemeral `hideUI` state (local `useState`, **not** persisted — always starts visible) hides all chrome so only the character renders. `hideUI` toggles via **F9** (a renderer `keydown`, works on web and desktop) or, in Electron, the 表示 menu "UIの表示/非表示" item → `webContents.send('toggle-ui')` → `window.tomariDesktop.onToggleUI` (preload). There is no transparent/frameless window and no native virtual camera; OBS Window Capture + Chroma Key (+ OBS Virtual Camera for meetings) covers both streaming and meetings.
+
 **Audio engine** (`makeAudioEngine` / `useAudioMouth` in `src/drivers/audioMouth.js`): a Web Audio analyser computes RMS level from mic and/or an `<audio>` element; the level (after gain + asymmetric attack/release envelope) is thresholded into 3 mouth stages (`thHalf`, `thFull`). Mouth switching is debounced (~70ms) to avoid jitter. The loop calls `useAudioMouth().frame(now, tw)` via `useAvatarLoop`'s `onFrame`.
 
 ### The Tweaks panel / EDITMODE protocol

@@ -7,19 +7,24 @@ import { useMouseDirection } from './drivers/mouseDirection';
 import { useAudioMouth } from './drivers/audioMouth';
 import { useBlinkTimer } from './drivers/blinkTimer';
 
-const { useState, useRef, useMemo } = React;
+const { useState, useRef, useMemo, useEffect } = React;
 
 const TALK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "followRange": 340,
   "smoothing": 0.3,
   "charSize": 64,
   "bgColor": "#FFF8EE",
+  "greenscreen": false,
+  "chromaColor": "#00B140",
   "micGain": 1.6,
   "thHalf": 0.07,
   "thFull": 0.2,
   "release": 0.12,
   "autoBlink": true
 }/*EDITMODE-END*/;
+
+// クロマキー用の単色プリセット（緑 / 青 / マゼンタ）
+const CHROMA_OPTIONS = ['#00B140', '#0047BB', '#FF00FF'];
 
 const { rows: ROWS, cols: COLS } = charConfig;
 // シート: 目開け×口[とじ/中間/開け] = A/B/C, 目閉じ×口[とじ/中間/開け] = D/E/F
@@ -38,6 +43,8 @@ function App() {
   const [t, setTweak] = useTweaks(TALK_DEFAULTS);
   const [cell, setCell] = useState({ r: 2, c: 2 });
   const [mouth, setMouth] = useState(0);        // 0:とじ 1:中間 2:開け
+  // UI を隠してキャラだけ表示（キャプチャ用）。永続化しない＝起動時は常に表示。
+  const [hideUI, setHideUI] = useState(false);
 
   const charRef = useRef(null);
   const meterRef = useRef(null);
@@ -57,6 +64,19 @@ function App() {
     onFrame: (now, tw) => { const m = audio.frame(now, tw); if (m != null) setMouth(m); },
   });
 
+  // UI 表示/非表示トグル: F9（web/desktop 共通）＋ Electron の 表示メニュー
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'F9') { e.preventDefault(); setHideUI((v) => !v); } };
+    window.addEventListener('keydown', onKey);
+    const off = window.tomariDesktop && window.tomariDesktop.onToggleUI
+      ? window.tomariDesktop.onToggleUI(() => setHideUI((v) => !v))
+      : null;
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (off) off();
+    };
+  }, []);
+
   const allFrames = useMemo(() => {
     const arr = [];
     for (const s of SHEETS) for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) arr.push({ s, r, c });
@@ -66,11 +86,14 @@ function App() {
 
   const { inkColor, subColor, panelBg, lineColor } = themeColors(t.bgColor);
 
+  // 実際に描画する背景: グリーンバック時はクロマ単色、通常時はテーマ背景色
+  const bg = t.greenscreen ? t.chromaColor : t.bgColor;
+
   const sizeVmin = t.charSize * 4 / 3;
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: t.bgColor,
+      position: 'fixed', inset: 0, background: bg,
       overflow: 'hidden', transition: 'background 0.4s ease',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       cursor: 'crosshair', fontFamily: "'Zen Maru Gothic', sans-serif"
@@ -90,6 +113,7 @@ function App() {
         ))}
       </div>
 
+      {!hideUI && (<>
       <div style={{ position: 'absolute', top: '3.5vh', left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
         <div style={{ fontSize: 'clamp(18px, 2.4vmin, 26px)', fontWeight: 700, color: inkColor, letterSpacing: '0.18em' }}>トマリトーク</div>
         <div style={{ fontSize: 'clamp(12px, 1.6vmin, 16px)', color: subColor, marginTop: 4, letterSpacing: '0.08em' }}>音声に合わせて口パク・まばたきするよ</div>
@@ -175,7 +199,15 @@ function App() {
           onChange={(v) => setTweak('charSize', v)}></TweakSlider>
         <TweakColor label="Background" value={t.bgColor} options={BG_OPTIONS}
           onChange={(v) => setTweak('bgColor', v)}></TweakColor>
+        <TweakSection label="Output"></TweakSection>
+        <TweakToggle label="Greenscreen background" value={t.greenscreen}
+          onChange={(v) => setTweak('greenscreen', v)}></TweakToggle>
+        <TweakColor label="Chroma color" value={t.chromaColor} options={CHROMA_OPTIONS}
+          onChange={(v) => setTweak('chromaColor', v)}></TweakColor>
+        <TweakToggle label="Hide UI (F9)" value={hideUI}
+          onChange={(v) => setHideUI(v)}></TweakToggle>
       </TweaksPanel>
+      </>)}
     </div>
   );
 }

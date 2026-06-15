@@ -8,4 +8,10 @@ contextBridge.exposeInMainWorld('tomariDesktop', {
   loadTweaks: (key) => ipcRenderer.sendSync('tweaks:load', key),
   // 変更のたびに差分を送る（fire-and-forget）
   saveTweaks: (key, edits) => ipcRenderer.send('tweaks:save', { key, edits }),
+  // 表示メニューからの UI 表示/非表示トグル。解除関数を返す。
+  onToggleUI: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on('toggle-ui', handler);
+    return () => ipcRenderer.removeListener('toggle-ui', handler);
+  },
 });

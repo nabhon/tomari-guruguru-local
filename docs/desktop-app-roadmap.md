@@ -2,7 +2,7 @@
 
 Plan for evolving トマリトーク from a browser page into a streaming/meeting-ready desktop avatar app. Three cycles, each independently shippable.
 
-Status: Cycle 0 (driver refactor) and Cycle 1 (Electron) are **done**; the mouse-follow-only "ぐるぐる" mode was subsequently removed, leaving トマリトーク as the only app. Cycle 2a is next.
+Status: Cycle 0 (driver refactor), Cycle 1 (Electron), and Cycle 2a (greenscreen + hide-UI) are **done**; the mouse-follow-only "ぐるぐる" mode was removed, leaving トマリトーク as the only app. Cycle 3 (face tracking) is next; Cycle 2b (native virtual camera) stays deferred.
 
 ---
 
@@ -66,11 +66,24 @@ Get the character out of its own window and into OBS / streaming / meeting softw
 
 So the feature breaks down as: *transparency → window/NDI capture*; *camera/meeting → greenscreen virtual cam*.
 
-### Cycle 2a — Transparent window + greenscreen preset (no native code)
-Covers OBS streamers immediately with zero driver work.
-- [ ] Render the character to a **transparent, borderless, always-on-top, optionally click-through** Electron window (`transparent: true`, `frame: false`, `setIgnoreMouseEvents`). OBS Window/Game Capture picks up the alpha on Windows. → real transparent output for streaming.
-- [ ] Add a **greenscreen background preset** (and arbitrary chroma color) to the existing `bgColor` tweak, plus a chroma-friendly default. → covers users who'd rather chroma-key.
-- [ ] "Output mode" UI: normal / transparent-overlay / greenscreen.
+### Cycle 2a — Greenscreen + hide-UI (no native code) — **DONE**
+Covers OBS streamers *and* meeting users immediately with zero driver work, and sidesteps the
+transparent-window pitfall (Electron's `transparent`/`frame` can only be set at window creation,
+not toggled live — so it would force window recreation or an always-frameless window).
+- [x] **Greenscreen background**: `greenscreen` + `chromaColor` tweaks (green `#00B140` / blue / magenta), painting a solid chroma field instead of `bgColor`.
+- [x] **Hide-UI toggle**: ephemeral `hideUI` state (not persisted) hiding all chrome so only the character shows. Toggle via **F9** (web + desktop) or the Electron 表示 menu ("UIの表示/非表示").
+- [x] **Output** section in the Tweaks panel for the above.
+
+The transparent/frameless overlay window is **dropped** for this cycle — OBS's Chroma Key removes
+the green just as well, with none of the recreation/frameless cost. (Left as an optional future
+stretch if a no-OBS transparent capture is ever wanted.)
+
+### How it reaches streaming *and* meetings (no native code)
+1. Turn on **Greenscreen** + **Hide UI (F9)** → window shows only the character on solid chroma.
+2. **OBS** → *Window Capture* the トマリ window → add a **Chroma Key** filter → green drops out.
+3. For meetings: **Start Virtual Camera** in OBS → トマリ appears as a selectable webcam in Zoom/Meet/Teams/Discord.
+
+So the meeting-webcam goal is met via OBS's built-in virtual camera layered on greenscreen — which is exactly why **Cycle 2b (a native in-app virtual camera) stays deferred**.
 
 ### Cycle 2b — Real virtual camera device (native, harder)
 For users who want the character to appear directly as a webcam in Zoom/Meet/Teams without OBS.
@@ -83,8 +96,12 @@ For users who want the character to appear directly as a webcam in Zoom/Meet/Tea
 ### Cycle 2c — Optional: NDI output (stretch)
 - [ ] NDI sender for true-alpha output into NDI-aware OBS/Zoom. Nice-to-have, scope later.
 
-### Decision — RESOLVED: OBS / streaming first
-**2a is the priority and the Cycle 2 deliverable.** Transparent overlay window + greenscreen preset cover streaming with no native code. **2b (real virtual camera) is deferred** — revisit only if meeting-app/webcam demand shows up after 2a ships. 2c (NDI) stays a stretch.
+### Decision — RESOLVED: OBS / streaming first; 2a shipped as greenscreen + hide-UI
+**2a was the Cycle 2 deliverable and is done** — but scoped to **greenscreen + hide-UI** rather
+than a transparent window (the transparent-overlay idea was dropped; OBS Chroma Key covers it).
+**2b (real virtual camera) stays deferred** — OBS Virtual Camera on top of greenscreen already
+delivers the meeting-webcam outcome, so revisit a native device only if a no-OBS workflow is
+demanded. 2c (NDI) stays a stretch.
 
 ---
 
@@ -116,8 +133,8 @@ Drive the character's head direction (and optionally mouth + blink) from the use
 
 1. **Cycle 0** (small refactor) — unlocks clean plug-in points.
 2. **Cycle 1** (Electron) — needed before any virtual-camera/native work; also fixes tweak persistence.
-3. **Cycle 2a** (transparent window + greenscreen) — fast, high value for streamers. **This is the Cycle 2 deliverable.**
-4. **Cycle 3** (face tracking) — independent; the last planned cycle.
-5. **Cycle 2b** (real virtual camera) — *deferred*, not scheduled. Revisit only if meeting-app/webcam demand appears.
+3. **Cycle 2a** (greenscreen + hide-UI) — **done**. Fast, high value for streamers *and* meetings (via OBS Virtual Camera).
+4. **Cycle 3** (face tracking) — independent; the last planned cycle. **Next up.**
+5. **Cycle 2b** (real virtual camera) — *deferred*, not scheduled. Revisit only if a no-OBS meeting-webcam workflow is demanded.
 
 Each cycle ends shippable. The existing web (GitHub Pages) build should keep working throughout.

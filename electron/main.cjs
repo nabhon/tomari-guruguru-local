@@ -48,6 +48,11 @@ function buildMenu() {
           checked: false,
           click: (item) => { if (win) win.setAlwaysOnTop(item.checked); },
         },
+        {
+          // アクセラレータは付けない（レンダラ側の F9 keydown と二重発火させないため）
+          label: 'UIの表示/非表示 (F9)',
+          click: () => { if (win) win.webContents.send('toggle-ui'); },
+        },
         ...(isDev
           ? [
               { type: 'separator' },
