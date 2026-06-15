@@ -25,6 +25,8 @@ const TALK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "faceSensitivity": 2.5,
   "faceInvertX": true,
   "faceInvertY": false,
+  "faceDeadzoneX": 0.08,
+  "faceDeadzoneY": 0.08,
   "mouthFromFace": false,
   "blinkFromFace": false,
   "jawHalf": 0.15,
@@ -43,7 +45,7 @@ const TALK_DEFAULTS = /*EDITMODE-BEGIN*/{
 const CHROMA_OPTIONS = ['#00B140', '#0047BB', '#FF00FF'];
 
 // 同梱の既定キャラ（静的ホストではこれのみ）。base は character-config の basePath。
-const BUILTIN_CHAR = { id: '__builtin', name: 'トマリ', base: charConfig.basePath };
+const BUILTIN_CHAR = { id: '__builtin', name: 'Tomari', base: charConfig.basePath };
 
 // キャラ一覧を三系統で解決: Electron(ブリッジ) / dev(フェッチ) / 静的(同梱のみ)。
 // 返す base: Electron='tomari-char://chars/<name>', dev='/characters/<name>', 静的=同梱。
@@ -206,7 +208,7 @@ function App() {
         borderRadius: '0 12px 12px 0', padding: '16px 7px', cursor: 'pointer',
         fontFamily: 'inherit', fontWeight: 700, fontSize: 12, letterSpacing: '0.15em',
         writingMode: 'vertical-rl', backdropFilter: 'blur(10px)'
-      }}>キャラ</button>
+      }}>Chars</button>
       <div style={{
         position: 'absolute', left: 0, top: 0, bottom: 0, width: 220, zIndex: 4,
         transform: charMenuOpen ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform 0.25s ease',
@@ -214,7 +216,7 @@ function App() {
         display: 'flex', flexDirection: 'column', gap: 8, padding: 16, boxSizing: 'border-box',
         boxShadow: '4px 0 24px rgba(60,48,38,0.10)'
       }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: inkColor, letterSpacing: '0.08em' }}>キャラクター</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: inkColor, letterSpacing: '0.08em' }}>Characters</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', flex: 1 }}>
           {characters.map((c) => {
             const on = charBase === c.base;
@@ -232,19 +234,19 @@ function App() {
           fontFamily: 'inherit', fontWeight: 700, fontSize: 12, color: inkColor,
           background: 'transparent', border: `1.5px solid ${lineColor}`, borderRadius: 10,
           padding: '8px 12px', cursor: 'pointer'
-        }}>↻ 一覧を更新</button>
+        }}>↻ Refresh list</button>
         {(typeof window !== 'undefined' && window.tomariDesktop && window.tomariDesktop.revealCharacters) ? (
           <button onClick={() => window.tomariDesktop.revealCharacters()} style={{
             fontFamily: 'inherit', fontWeight: 700, fontSize: 12, color: subColor,
             background: 'transparent', border: `1.5px solid ${lineColor}`, borderRadius: 10,
             padding: '8px 12px', cursor: 'pointer'
-          }}>📁 フォルダを開く</button>
+          }}>📁 Open folder</button>
         ) : null}
       </div>
 
       <div style={{ position: 'absolute', top: '3.5vh', left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
-        <div style={{ fontSize: 'clamp(18px, 2.4vmin, 26px)', fontWeight: 700, color: inkColor, letterSpacing: '0.18em' }}>トマリトーク</div>
-        <div style={{ fontSize: 'clamp(12px, 1.6vmin, 16px)', color: subColor, marginTop: 4, letterSpacing: '0.08em' }}>音声に合わせて口パク・まばたきするよ</div>
+        <div style={{ fontSize: 'clamp(18px, 2.4vmin, 26px)', fontWeight: 700, color: inkColor, letterSpacing: '0.18em' }}>Charac Talk</div>
+        <div style={{ fontSize: 'clamp(12px, 1.6vmin, 16px)', color: subColor, marginTop: 4, letterSpacing: '0.08em' }}>-</div>
       </div>
 
       <div style={{
@@ -269,18 +271,8 @@ function App() {
             background: audio.micOn ? '#fff' : '#D96C4F',
             animation: audio.micOn ? 'pulse 1.2s ease-in-out infinite' : 'none'
           }}></span>
-          {audio.micOn ? 'マイク停止' : 'マイク開始'}
+          {audio.micOn ? 'Stop mic' : 'Start mic'}
         </button>
-
-        <label style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          fontWeight: 700, fontSize: 14, color: inkColor,
-          border: `1.5px solid ${lineColor}`, borderRadius: 12,
-          padding: '9px 16px', cursor: 'pointer', minHeight: 44, boxSizing: 'border-box'
-        }}>
-          ♪ 音声ファイル
-          <input type="file" accept="audio/*" onChange={audio.onFilePick} style={{ display: 'none' }}></input>
-        </label>
 
         <button onClick={() => (face.cameraOn ? face.stop() : face.start())} style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -296,13 +288,13 @@ function App() {
             background: face.cameraOn ? '#fff' : '#4F86D9',
             animation: face.cameraOn ? 'pulse 1.2s ease-in-out infinite' : 'none'
           }}></span>
-          {face.cameraOn ? '顔カメラ停止' : '顔カメラ開始'}
+          {face.cameraOn ? 'Stop face cam' : 'Start face cam'}
         </button>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 150 }}>
           <div style={{ fontSize: 11, color: subColor, letterSpacing: '0.06em', display: 'flex', justifyContent: 'space-between' }}>
-            <span>音量</span>
-            <span>{['とじ', 'はんびらき', 'ぜんかい'][mouth]}</span>
+            <span>Volume</span>
+            <span>{['Closed', 'Half', 'Open'][mouth]}</span>
           </div>
           <div style={{ position: 'relative', height: 10, borderRadius: 5, background: lineColor, overflow: 'hidden' }}>
             <div ref={meterRef} style={{
@@ -321,12 +313,8 @@ function App() {
         <div style={{ position: 'absolute', bottom: 116, left: '50%', transform: 'translateX(-50%)', color: '#B3261E', fontSize: 13, fontWeight: 700 }}>{face.error}</div>
       ) : null}
       {face.cameraOn ? (
-        <div style={{ position: 'absolute', bottom: 92, left: '50%', transform: 'translateX(-50%)', color: subColor, fontSize: 12 }}>顔追跡は端末内だけで処理されます（送信なし）</div>
+        <div style={{ position: 'absolute', bottom: 92, left: '50%', transform: 'translateX(-50%)', color: subColor, fontSize: 12 }}>Face tracking runs only on this device (nothing is sent)</div>
       ) : null}
-      <audio ref={audio.audioElRef} controls style={{
-        position: 'absolute', bottom: 20, right: 20, width: 260,
-        display: audio.fileName ? 'block' : 'none', cursor: 'default'
-      }}></audio>
 
       <TweaksPanel>
         <TweakSection label="Lip sync"></TweakSection>
@@ -360,6 +348,10 @@ function App() {
         <TweakSection label="Face camera"></TweakSection>
         <TweakSlider label="Head sensitivity" value={t.faceSensitivity} min={1} max={6} step={0.1}
           onChange={(v) => setTweak('faceSensitivity', v)}></TweakSlider>
+        <TweakSlider label="Deadzone (horizontal)" value={t.faceDeadzoneX} min={0} max={0.5} step={0.01}
+          onChange={(v) => setTweak('faceDeadzoneX', v)}></TweakSlider>
+        <TweakSlider label="Deadzone (vertical)" value={t.faceDeadzoneY} min={0} max={0.5} step={0.01}
+          onChange={(v) => setTweak('faceDeadzoneY', v)}></TweakSlider>
         <TweakToggle label="Mirror (left/right)" value={t.faceInvertX}
           onChange={(v) => setTweak('faceInvertX', v)}></TweakToggle>
         <TweakToggle label="Invert vertical" value={t.faceInvertY}

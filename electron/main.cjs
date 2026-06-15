@@ -21,7 +21,7 @@ function createWindow() {
     height: 900,
     ...(bounds || {}),
     backgroundColor: '#FFF8EE',
-    title: 'トマリ',
+    title: 'Tomari',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -47,17 +47,17 @@ function buildMenu() {
   const isDev = !app.isPackaged;
   const template = [
     {
-      label: '表示',
+      label: 'View',
       submenu: [
         {
-          label: '最前面に固定',
+          label: 'Always on top',
           type: 'checkbox',
           checked: false,
           click: (item) => { if (win) win.setAlwaysOnTop(item.checked); },
         },
         {
           // アクセラレータは付けない（レンダラ側の F9 keydown と二重発火させないため）
-          label: 'UIの表示/非表示 (F9)',
+          label: 'Show/Hide UI (F9)',
           click: () => { if (win) win.webContents.send('toggle-ui'); },
         },
         ...(isDev
@@ -68,7 +68,7 @@ function buildMenu() {
             ]
           : []),
         { type: 'separator' },
-        { role: 'quit', label: '終了' },
+        { role: 'quit', label: 'Quit' },
       ],
     },
   ];

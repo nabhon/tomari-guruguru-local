@@ -3,12 +3,9 @@ import { clamp } from '../engine/shared';
 
 const { useState, useRef, useMemo, useCallback } = React;
 
-// ---- 音声エンジン ----
+// ---- 音声エンジン（マイクのみ） ----
 function makeAudioEngine() {
-  const st = {
-    ctx: null, micAnalyser: null, micStream: null,
-    fileAnalyser: null, fileSourceMade: false, buf: null
-  };
+  const st = { ctx: null, micAnalyser: null, micStream: null, buf: null };
   function ctx() {
     if (!st.ctx) st.ctx = new (window.AudioContext || window.webkitAudioContext)();
     return st.ctx;
@@ -38,33 +35,19 @@ function makeAudioEngine() {
       st.micStream = null;
       st.micAnalyser = null;
     },
-    attachAudioEl(el) {
-      if (st.fileSourceMade) return;
-      const c = ctx();
-      const src = c.createMediaElementSource(el);
-      const an = c.createAnalyser();
-      an.fftSize = 1024;
-      src.connect(an);
-      an.connect(c.destination);
-      st.fileAnalyser = an;
-      st.fileSourceMade = true;
-    },
-    resume() { if (st.ctx) st.ctx.resume(); },
-    level() { return Math.max(levelOf(st.micAnalyser), levelOf(st.fileAnalyser)); },
+    level() { return levelOf(st.micAnalyser); },
     micOn() { return !!st.micAnalyser; }
   };
 }
 
-// MouthSource: マイク／音声ファイルの音量から口段階(0|1|2)を求める。
+// MouthSource: マイク音量から口段階(0|1|2)を求める。
 // メインループの onFrame から frame(now, tw) を毎フレーム呼ぶ。エンベロープ追従・
 // しきい値判定・70ms デバウンス・メータ表示をここに閉じ込める。
 export function useAudioMouth(meterRef) {
   const [micOn, setMicOn] = useState(false);
   const [micErr, setMicErr] = useState('');
-  const [fileName, setFileName] = useState('');
 
   const engine = useMemo(() => makeAudioEngine(), []);
-  const audioElRef = useRef(null);
   const env = useRef(0);
   const lastMouth = useRef(0);
   const lastSwitch = useRef(0);
@@ -94,20 +77,9 @@ export function useAudioMouth(meterRef) {
       await engine.startMic();
       setMicOn(true);
     } catch (e) {
-      setMicErr('マイクを使用できません（権限を確認してください）');
+      setMicErr("Can't access the mic (check permissions)");
     }
   }
 
-  function onFilePick(e) {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    const el = audioElRef.current;
-    engine.attachAudioEl(el);
-    engine.resume();
-    el.src = URL.createObjectURL(f);
-    el.play().catch(() => {});
-    setFileName(f.name);
-  }
-
-  return { frame, toggleMic, onFilePick, micOn, micErr, fileName, audioElRef };
+  return { frame, toggleMic, micOn, micErr };
 }

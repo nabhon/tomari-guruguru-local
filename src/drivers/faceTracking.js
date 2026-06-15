@@ -36,6 +36,15 @@ function scoreOf(categories, name) {
   return 0;
 }
 
+// デッドゾーン: |v|<=dz は 0 にし、それ以降は 0→フル(±1)へ再スケール。
+// 中心付近の小さな揺れ/過敏な振り向きを抑える（フルレンジには到達できる）。
+function deadzone(v, dz) {
+  if (!dz || dz <= 0) return v;
+  const a = Math.abs(v);
+  if (a <= dz) return 0;
+  return Math.sign(v) * (a - dz) / (1 - dz);
+}
+
 export function useFaceTracking({ tweaksRef, targetRef }) {
   const [cameraOn, setCameraOn] = useState(false);
   const [error, setError] = useState('');
@@ -74,8 +83,8 @@ export function useFaceTracking({ tweaksRef, targetRef }) {
       if (needNeutralRef.current) { neutralRef.current = { ...p }; needNeutralRef.current = false; }
       const tw = tweaksRef.current;
       const sens = tw.faceSensitivity;
-      let nx = (p.yaw - neutralRef.current.yaw) * sens;
-      let ny = (p.pitch - neutralRef.current.pitch) * sens;
+      let nx = deadzone((p.yaw - neutralRef.current.yaw) * sens, tw.faceDeadzoneX);
+      let ny = deadzone((p.pitch - neutralRef.current.pitch) * sens, tw.faceDeadzoneY);
       if (tw.faceInvertX) nx = -nx;
       if (tw.faceInvertY) ny = -ny;
       targetRef.current.x = clamp(nx, -1, 1);
@@ -205,7 +214,7 @@ export function useFaceTracking({ tweaksRef, targetRef }) {
       detectLoop();
     } catch (e) {
       stop();
-      setError('カメラを使用できません（権限・接続を確認してください）');
+      setError("Can't access the camera (check permissions/connection)");
     }
   }, [openStream, ensureModel, detectLoop, stop]);
 
@@ -214,7 +223,7 @@ export function useFaceTracking({ tweaksRef, targetRef }) {
     if (!runningRef.current) return;
     clearTimeout(camTimer.current);
     camTimer.current = setTimeout(() => {
-      openStream().catch(() => setError('カメラを切り替えできませんでした'));
+      openStream().catch(() => setError("Couldn't switch camera"));
     }, 300);
   }, [openStream]);
 

@@ -51,7 +51,7 @@ function ensureDefaultCharacter() {
     fs.mkdirSync(dir, { recursive: true });
     if (listCharacters().length > 0) return;
     const src = bundledSlices();
-    if (fs.existsSync(src)) copyDir(src, path.join(dir, 'トマリ'));
+    if (fs.existsSync(src)) copyDir(src, path.join(dir, 'Tomari'));
   } catch (e) {
     console.error('ensureDefaultCharacter failed:', e);
   }
