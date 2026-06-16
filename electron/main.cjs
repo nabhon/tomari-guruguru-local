@@ -1,5 +1,5 @@
 // Electron メインプロセス — トマリのデスクトップ版ウィンドウ。
-const { app, BrowserWindow, Menu, ipcMain, session, protocol, net, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session, protocol, net, shell, clipboard } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const settings = require('./settings.cjs');
@@ -21,7 +21,7 @@ function createWindow() {
     height: 900,
     ...(bounds || {}),
     backgroundColor: '#FFF8EE',
-    title: 'Tomari',
+    title: 'CaffeLook',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -83,6 +83,9 @@ ipcMain.on('tweaks:save', (e, { key, edits }) => { settings.saveTweaks(key, edit
 ipcMain.handle('characters:list', () => characters.listCharacters());
 ipcMain.handle('characters:create', (e, { name, files }) => characters.createCharacter(name, files));
 ipcMain.on('characters:reveal', () => { shell.openPath(characters.charactersDir()); });
+
+// クリップボード書き込み（sandbox の preload では clipboard を使えないため main で実行）
+ipcMain.on('clipboard:write', (e, text) => { clipboard.writeText(String(text)); });
 
 app.whenReady().then(() => {
   // マイク等のメディア権限を許可（口パク用 getUserMedia）

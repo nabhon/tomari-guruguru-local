@@ -18,4 +18,7 @@ contextBridge.exposeInMainWorld('tomariDesktop', {
   listCharacters: () => ipcRenderer.invoke('characters:list'),
   createCharacter: (name, files) => ipcRenderer.invoke('characters:create', { name, files }),
   revealCharacters: () => ipcRenderer.send('characters:reveal'),
+  // file:// では navigator.clipboard が使えない。sandbox の preload では clipboard モジュールも
+  // 使えないため、main プロセスへ書き込みを依頼する。
+  copyText: (text) => ipcRenderer.send('clipboard:write', String(text)),
 });

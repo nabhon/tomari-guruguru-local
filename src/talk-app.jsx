@@ -261,7 +261,7 @@ function App() {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       cursor: 'crosshair', fontFamily: "'Zen Maru Gothic', sans-serif"
     }}>
-      <div ref={charRef} className="bob" style={{
+      <div ref={charRef} style={{
         position: 'relative',
         width: `${sizeVmin}vmin`, height: `${sizeVmin}vmin`,
         maxWidth: 1200, maxHeight: 1200,
@@ -414,11 +414,18 @@ function App() {
             </ol>
             <div style={{ fontSize: 11, color: subColor }}>{GUIDE_NOTE}</div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-              <button onClick={() => {
-                navigator.clipboard.writeText(GEN_PROMPT).then(() => {
+              <button onClick={async () => {
+                let ok = false;
+                // Electron(file://)では navigator.clipboard が使えないのでネイティブ経由。
+                if (window.tomariDesktop?.copyText) {
+                  try { window.tomariDesktop.copyText(GEN_PROMPT); ok = true; } catch {}
+                } else {
+                  try { await navigator.clipboard.writeText(GEN_PROMPT); ok = true; } catch {}
+                }
+                if (ok) {
                   setPromptCopied(true);
                   setTimeout(() => setPromptCopied(false), 1500);
-                });
+                }
               }} style={{
                 fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff',
                 background: '#4F86D9', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer'
