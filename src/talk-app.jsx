@@ -7,7 +7,7 @@ import { useMouseDirection } from './drivers/mouseDirection';
 import { useAudioMouth } from './drivers/audioMouth';
 import { useBlinkTimer } from './drivers/blinkTimer';
 import { useFaceTracking } from './drivers/faceTracking';
-import { GEN_PROMPT, GUIDE_STEPS, GUIDE_NOTE } from './character-guide';
+import { GEN_PROMPT, GEN_PROMPT_STYLE, GUIDE_STEPS, GUIDE_NOTE } from './character-guide';
 
 const { useState, useRef, useMemo, useEffect, useCallback } = React;
 
@@ -148,7 +148,20 @@ function App() {
   const [addFiles, setAddFiles] = useState({});   // { A: File, ... }
   const [addStatus, setAddStatus] = useState('');
   const [addBusy, setAddBusy] = useState(false);
-  const [promptCopied, setPromptCopied] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(''); // '' | 'normal' | 'style'
+  // Electron(file://)では navigator.clipboard が使えないのでネイティブ経由。
+  const copyPrompt = async (text, key) => {
+    let ok = false;
+    if (window.tomariDesktop?.copyText) {
+      try { window.tomariDesktop.copyText(text); ok = true; } catch {}
+    } else {
+      try { await navigator.clipboard.writeText(text); ok = true; } catch {}
+    }
+    if (ok) {
+      setPromptCopied(key);
+      setTimeout(() => setPromptCopied(''), 1500);
+    }
+  };
 
   const charRef = useRef(null);
   const meterRef = useRef(null);
@@ -413,23 +426,15 @@ function App() {
               {GUIDE_STEPS.map((s, i) => <li key={i}>{s}</li>)}
             </ol>
             <div style={{ fontSize: 11, color: subColor }}>{GUIDE_NOTE}</div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-              <button onClick={async () => {
-                let ok = false;
-                // Electron(file://)では navigator.clipboard が使えないのでネイティブ経由。
-                if (window.tomariDesktop?.copyText) {
-                  try { window.tomariDesktop.copyText(GEN_PROMPT); ok = true; } catch {}
-                } else {
-                  try { await navigator.clipboard.writeText(GEN_PROMPT); ok = true; } catch {}
-                }
-                if (ok) {
-                  setPromptCopied(true);
-                  setTimeout(() => setPromptCopied(false), 1500);
-                }
-              }} style={{
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => copyPrompt(GEN_PROMPT, 'normal')} style={{
                 fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff',
                 background: '#4F86D9', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer'
-              }}>{promptCopied ? 'Copied!' : 'Copy prompt'}</button>
+              }}>{promptCopied === 'normal' ? 'Copied!' : 'Copy prompt'}</button>
+              <button onClick={() => copyPrompt(GEN_PROMPT_STYLE, 'style')} style={{
+                fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff',
+                background: '#4F86D9', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer'
+              }}>{promptCopied === 'style' ? 'Copied!' : 'Copy 3-image prompt'}</button>
               <button onClick={() => setShowGuide(false)} style={{
                 fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: inkColor,
                 background: 'transparent', border: `1.5px solid ${lineColor}`, borderRadius: 10, padding: '8px 16px', cursor: 'pointer'
