@@ -14,6 +14,7 @@ const { useState, useRef, useMemo, useEffect, useCallback } = React;
 const TALK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "followRange": 340,
   "smoothing": 0.3,
+  "globalCursor": false,
   "charSize": 64,
   "bgColor": "#FFF8EE",
   "greenscreen": false,
@@ -218,7 +219,7 @@ function App() {
   const face = useFaceTracking({ tweaksRef, targetRef: target });
   const mouseEnabled = useRef(true);
   mouseEnabled.current = !face.cameraOn;
-  useMouseDirection({ charRef, tweaksRef, targetRef: target, enabledRef: mouseEnabled });
+  useMouseDirection({ charRef, tweaksRef, targetRef: target, enabledRef: mouseEnabled, globalCursor: t.globalCursor });
 
   // 口・まばたきは「顔から」かつカメラONのときだけ顔ソースへ切替（OFF時は従来どおり）
   const faceBlink = t.blinkFromFace && face.cameraOn;
@@ -533,6 +534,10 @@ function App() {
           onChange={(v) => setTweak('followRange', v)}></TweakSlider>
         <TweakSlider label="Follow speed" value={t.smoothing} min={0.04} max={0.5} step={0.01}
           onChange={(v) => setTweak('smoothing', v)}></TweakSlider>
+        {window.tomariDesktop && (
+          <TweakToggle label="Follow cursor when unfocused (desktop)" value={t.globalCursor}
+            onChange={(v) => setTweak('globalCursor', v)}></TweakToggle>
+        )}
         <TweakSection label="Appearance"></TweakSection>
         <TweakSlider label="Character size" value={t.charSize} min={30} max={92} unit="vmin"
           onChange={(v) => setTweak('charSize', v)}></TweakSlider>

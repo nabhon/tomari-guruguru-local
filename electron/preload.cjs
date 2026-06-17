@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld('tomariDesktop', {
     ipcRenderer.on('toggle-ui', handler);
     return () => ipcRenderer.removeListener('toggle-ui', handler);
   },
+  // グローバルカーソル追従: ポーリングの開始/停止と、相対座標イベントの購読。
+  setGlobalCursor: (on) => ipcRenderer.send('cursor:track', !!on),
+  onGlobalCursor: (cb) => {
+    const handler = (_e, p) => cb(p);
+    ipcRenderer.on('global-cursor', handler);
+    return () => ipcRenderer.removeListener('global-cursor', handler);
+  },
   // キャラクター一覧の取得 / 作成 / characters フォルダを開く
   listCharacters: () => ipcRenderer.invoke('characters:list'),
   createCharacter: (name, files) => ipcRenderer.invoke('characters:create', { name, files }),

@@ -1,5 +1,5 @@
 // Electron メインプロセス — トマリのデスクトップ版ウィンドウ。
-const { app, BrowserWindow, Menu, ipcMain, session, protocol, net, shell, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session, protocol, net, shell, clipboard, screen } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const settings = require('./settings.cjs');
@@ -13,6 +13,11 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let win = null;
+let cursorTimer = null;
+
+function stopCursorTracking() {
+  if (cursorTimer) { clearInterval(cursorTimer); cursorTimer = null; }
+}
 
 function createWindow() {
   const bounds = settings.getWindowBounds();
@@ -40,7 +45,7 @@ function createWindow() {
   win.on('close', () => {
     if (win && !win.isDestroyed()) settings.saveWindowBounds(win.getBounds());
   });
-  win.on('closed', () => { win = null; });
+  win.on('closed', () => { stopCursorTracking(); win = null; });
 }
 
 function buildMenu() {
@@ -86,6 +91,23 @@ ipcMain.on('characters:reveal', () => { shell.openPath(characters.charactersDir(
 
 // クリップボード書き込み（sandbox の preload では clipboard を使えないため main で実行）
 ipcMain.on('clipboard:write', (e, text) => { clipboard.writeText(String(text)); });
+
+// グローバルカーソル追従: OS のカーソル位置を一定間隔でポーリングし、
+// ウィンドウのコンテンツ領域基準の相対座標（clientX/clientY 相当）にして送る。
+// getCursorScreenPoint も getContentBounds も DIP 単位なので変換不要。
+ipcMain.on('cursor:track', (e, on) => {
+  if (on) {
+    if (cursorTimer) return;
+    cursorTimer = setInterval(() => {
+      if (!win || win.isDestroyed()) { stopCursorTracking(); return; }
+      const b = win.getContentBounds();
+      const p = screen.getCursorScreenPoint();
+      win.webContents.send('global-cursor', { x: p.x - b.x, y: p.y - b.y });
+    }, 16);
+  } else {
+    stopCursorTracking();
+  }
+});
 
 app.whenReady().then(() => {
   // マイク等のメディア権限を許可（口パク用 getUserMedia）
