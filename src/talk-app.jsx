@@ -313,6 +313,13 @@ function App() {
     };
   }, []);
 
+  // hideUI 連動で Electron のメニューバー(View)も隠す/戻す。
+  useEffect(() => {
+    if (window.tomariDesktop && window.tomariDesktop.setUiHidden) {
+      window.tomariDesktop.setUiHidden(hideUI);
+    }
+  }, [hideUI]);
+
   const allFrames = useMemo(() => {
     const arr = [];
     for (const s of SHEETS) for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) arr.push({ s, r, c });

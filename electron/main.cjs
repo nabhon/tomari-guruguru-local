@@ -92,6 +92,12 @@ ipcMain.on('characters:reveal', () => { shell.openPath(characters.charactersDir(
 // クリップボード書き込み（sandbox の preload では clipboard を使えないため main で実行）
 ipcMain.on('clipboard:write', (e, text) => { clipboard.writeText(String(text)); });
 
+// UI 非表示中はウィンドウ上部のメニューバー(View)も隠す。再表示で戻す。
+// （Windows では Alt で一時的に呼び出せるので閉じ込めにはならない）
+ipcMain.on('ui:hidden', (e, hidden) => {
+  if (win) win.setMenuBarVisibility(!hidden);
+});
+
 // グローバルカーソル追従: OS のカーソル位置を一定間隔でポーリングし、
 // ウィンドウのコンテンツ領域基準の相対座標（clientX/clientY 相当）にして送る。
 // getCursorScreenPoint も getContentBounds も DIP 単位なので変換不要。

@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('tomariDesktop', {
     ipcRenderer.on('toggle-ui', handler);
     return () => ipcRenderer.removeListener('toggle-ui', handler);
   },
+  // UI 非表示状態を main に伝え、ウィンドウのメニューバーも連動して隠す。
+  setUiHidden: (hidden) => ipcRenderer.send('ui:hidden', !!hidden),
   // グローバルカーソル追従: ポーリングの開始/停止と、相対座標イベントの購読。
   setGlobalCursor: (on) => ipcRenderer.send('cursor:track', !!on),
   onGlobalCursor: (cb) => {
