@@ -1,267 +1,228 @@
-# トマリトーク
+# CaffeLook
 
-マウスに追従して25方向に振り向き、マイク入力に合わせて口パク・まばたきする、トマリ用のブラウザ／デスクトップアバターです。
-
-![トマリトークの動作デモ](guruguru.gif)
+A browser & desktop **avatar** for the character *Tomari*. The avatar turns to follow
+your mouse (or your face via webcam) across **15 directions**, lip-syncs from the
+microphone, and auto-blinks. No backend — everything runs locally in the browser, and
+it's also packaged as a Windows desktop app via Electron.
 
 ---
 
-## セットアップ
+## Features
 
-必要環境:
+- **Mouse follow** — the head turns across a 5×3 grid (15 directions: up↔down × 45°left / front / 45°right).
+- **Lip sync** — microphone RMS level drives a 3-stage mouth (closed / half / open).
+- **Auto-blink** — randomized single/double/slow blinks.
+- **Face tracking** — drive direction, mouth, and blink from a webcam using **MediaPipe FaceLandmarker** (runs fully on-device; no video leaves your machine).
+- **Streaming / meetings** — solid chroma background + **Hide UI (F9)** for OBS Window Capture → Chroma Key (→ OBS Virtual Camera for meetings).
+- **Character switching** — pick from a `characters/` folder; add your own in-app with automatic chroma-key background removal and head auto-centering.
 
-- Node.js 22 LTS 推奨
-- Vite 8 の要件: Node.js 20.19+ または 22.12+
+---
+
+## Requirements
+
+- **Node.js** `^20.19` or `>=22.12` (required by Vite 8).
+- Microphone input only works on `localhost` or HTTPS.
 
 ```bash
 npm install
 ```
 
-## ローカル起動
+The MediaPipe face-tracking model + WASM (~25 MB) live in `public/mediapipe/` and are
+committed. If you ever need to re-fetch them:
 
-Windowsなら `start.bat` をダブルクリックすると、ローカルサーバーを起動してブラウザで開きます。
+```bash
+npm run setup:mediapipe
+```
 
-手動で起動する場合は:
+---
+
+## Run (development)
 
 ```bash
 npm run dev
 ```
 
-トマリトークが自動で開きます。手動でアクセスする場合は:
+The dev server starts at `http://127.0.0.1:5173` and auto-opens `/talk.html`.
+On Windows you can also double-click `start.bat`.
 
-```text
-http://127.0.0.1:5173/talk.html
-```
-
-注意:
-
-- マイク入力は `localhost` または HTTPS でのみ利用できます。
-- Google Fonts はCDNから読み込むため、初回表示にはネット接続が必要です。
-
-## ビルド
+### Desktop (Electron) in dev
 
 ```bash
-npm run build
-npm run preview   # ビルド結果をローカル確認
-```
-
-preview は GitHub Pages と同じ `/tomari-guruguru/` のベースパスで起動します。
-
-```text
-http://127.0.0.1:4173/tomari-guruguru/talk.html
+npm run electron:dev   # starts Vite + opens the Electron window
 ```
 
 ---
 
-## ディレクトリ構成
+## Build
+
+### Web (GitHub Pages)
+
+```bash
+npm run build          # → dist/ (base path /tomari-guruguru/)
+npm run verify:pages   # validate dist/ against Pages expectations
+npm run preview        # serve dist/ at http://127.0.0.1:4173/tomari-guruguru/talk.html
+```
+
+`verify:pages` asserts the built HTML uses the `/tomari-guruguru/` base path, that
+referenced assets exist, and that each of the 6 sheets (`A`–`F`) under
+`dist/slices2/` contains exactly **15** `.webp` files. CI runs `build` + `verify:pages`
+on every PR/push to `main`; deploy happens only on `main`.
+
+### Desktop (portable .exe)
+
+```bash
+npm run build:desktop  # vite build --mode electron (base './' for file://)
+npm run dist           # build:desktop + electron-builder → release/ portable .exe
+```
+
+The app icon is `CaffeLook.ico` (configured in `electron-builder.yml`).
+
+---
+
+## Project structure
 
 ```
 .
-├── index.html              # トマリトークへのリダイレクト
-├── talk.html                 # トーク版エントリ
-├── vite.config.js          # Vite 8 ビルド設定
+├── index.html              # meta-refresh redirect to talk.html
+├── talk.html               # app entry (loads tweaks-panel.jsx then talk-app.jsx)
+├── vite.config.js          # multi-page Vite config + dev character middleware
 ├── package.json
-├── start.bat               # Windows用起動バッチ
-├── electron/               # デスクトップ版（main / preload / settings）
+├── electron-builder.yml    # desktop packaging (portable .exe, CaffeLook.ico)
+├── start.bat               # Windows dev launcher
+├── CaffeLook.ico           # desktop app icon
+├── electron/               # desktop app
+│   ├── main.cjs            # window, menu, media permissions, IPC, custom protocol
+│   ├── preload.cjs         # window.tomariDesktop bridge
+│   ├── settings.cjs        # JSON settings store (userData)
+│   └── characters.cjs      # filesystem character discovery / creation
 ├── src/
-│   ├── talk-app.jsx        # アプリ本体
-│   ├── engine/             # 共有ループ・ヘルパー
-│   ├── drivers/            # 入力ソース（マウス追従 / 音声口パク / まばたき）
-│   ├── tweaks-panel.jsx    # 画面右下の調整パネル
-│   └── character-config.js # キャラ画像の参照先を一元管理
+│   ├── talk-app.jsx        # main app + in-app character slicer (sliceSheets)
+│   ├── engine/             # useAvatarLoop (rAF loop) + shared helpers (cellFromXY…)
+│   ├── drivers/            # input sources: mouseDirection, audioMouth, blinkTimer, faceTracking
+│   ├── tweaks-panel.jsx    # floating Tweaks panel + useTweaks (loaded first)
+│   ├── character-config.js # single source of truth for the grid + frame paths
+│   └── character-guide.js  # generation prompts + in-app guide text
 ├── public/
-│   └── slices2/            # スライス済みキャラ画像 (Git追跡)
-├── docs/                   # 画像生成・差し替え手順の資料
-│   ├── 01_画像指示例.png
-│   ├── 01_画像生成用テンプレ.png
-│   ├── 01_画像生成用プロンプト.txt
-│   ├── 再生用トマリセリフ.wav
-│   └── 新キャラ差し替え手順.md
+│   ├── slices2/            # bundled character frames (committed)
+│   ├── guide/              # template.png / template-grid.png (placement reference)
+│   └── mediapipe/          # FaceLandmarker model + WASM (committed)
+├── scripts/
+│   ├── verify-pages-build.mjs
+│   └── fetch-mediapipe.mjs
 ├── tools/
-│   └── slice_character_sheets.py
-├── sheets/                 # 元シート画像 (Git非追跡)
-├── uploads/                # 元アップロード画像 (Git非追跡)
-├── 新キャラ資料/            # 新キャラ素材 (Git非追跡)
-├── LICENSE
-├── ASSET_LICENSE.md
-└── README.md
+│   └── slice_character_sheets.py   # high-fidelity character slicer (ffmpeg)
+├── docs/                   # character guide + planning notes
+├── characters/             # added characters (git-ignored)
+├── LICENSE                 # MIT (code)
+└── ASSET_LICENSE.md        # non-commercial (character art/audio)
 ```
 
 ---
 
-## フレーム画像の仕組み
+## How the frames work
 
-このアプリは、キャラクターの向きと表情に応じて `public/slices2/` 内の画像を1枚ずつ切り替えています。
+The character is a set of pre-rendered images swapped in real time — direction and
+expression changes are instant because every frame for the current state is preloaded
+and only the active one is shown.
 
-### 25方向
+### 15 directions (5 rows × 3 columns)
 
-5列 × 5行の向き差分です。
+- **Columns** (`c0`–`c2`): `c0` 45° left · `c1` front · `c2` 45° right
+- **Rows** (`r0`–`r4`): `r0` strong up · `r1` up · `r2` level · `r3` down · `r4` strong down
 
-- 列: 左向き → 正面 → 右向き
-  - `c0`: 左向き / `c1`: 左斜め / `c2`: 正面 / `c3`: 右斜め / `c4`: 右向き
-- 行: 上向き → 水平 → 下向き
-  - `r0`: 強く上を見る / `r1`: 少し上 / `r2`: 水平 / `r3`: 少し下 / `r4`: 強く下
+The center / neutral pose is `r2c1`.
 
-### 6状態
+### 6 sheets (eyes × mouth)
 
-| フォルダ | 目 | 口 |
-|---|---|---|
-| `A` | 開け | とじ |
-| `B` | 開け | 中間 |
-| `C` | 開け | 開け |
-| `D` | 閉じ | とじ |
-| `E` | 閉じ | 中間 |
-| `F` | 閉じ | 開け |
+| Folder | Eyes   | Mouth  |
+|--------|--------|--------|
+| `A`    | open   | closed |
+| `B`    | open   | half   |
+| `C`    | open   | open   |
+| `D`    | closed | closed |
+| `E`    | closed | half   |
+| `F`    | closed | open   |
 
-画像パス例: `slices2/A/r2c2.webp`
-
-`src/character-config.js` の `basePath` と `ext` で切り替え可能です。
-
----
-
-## 使い方
-
-1. `talk.html` を開く
-2. **マイク開始**（Start mic）を押す
-3. 音量に応じて口が切り替わります（とじ / はんびらき / ぜんかい）
-4. まばたき時は `D/E/F` の目閉じ画像に切り替わります
+6 sheets × 15 directions = **90 frames**. Example path: `slices2/A/r2c1.webp`.
+The grid size and frame-path pattern live in `src/character-config.js` (`rows: 5, cols: 3`).
 
 ---
 
-## Tweaks 調整パネル
+## Usage
 
-画面右下の **Tweaks** ボタンから調整できます。
+1. Open `talk.html`.
+2. Press **Start mic** — the mouth follows your voice (closed / half / open).
+3. Move the mouse — the head turns to follow it; auto-blink runs on a timer.
+4. Open the **Tweaks** panel (bottom-right) to adjust sensitivity, follow range/speed,
+   character size, background, and output options.
 
-主な項目:
+### Face camera
 
-- マイク感度 / 口パクのしきい値 / 口を閉じる速さ / 自動まばたき
-- 追従範囲 / 追従速度 / キャラサイズ / 背景色
-- **Output**: グリーンバック / クロマカラー / UI非表示（後述）
-
----
-
-## 配信・会議で使う (OBS)
-
-キャラだけを配信や会議に映すには、OBS のクロマキーを使います。アプリ側でグリーンバックにして UI を隠し、OBS で緑を抜きます。
-
-1. **Output** で **Greenscreen background** をオンにする（背景がクロマ単色になります。緑 `#00B140` / 青 / マゼンタから選択可）
-2. **F9**（または Output の **Hide UI**、デスクトップ版は「表示」メニューの「UIの表示/非表示」）で UI を隠し、キャラだけにする
-3. OBS で **ウィンドウキャプチャ** にトマリのウィンドウを追加する
-4. そのソースに **クロマキー** フィルタを追加して背景の緑を抜く
-5. 会議アプリ（Zoom / Meet / Teams など）で使う場合は、OBS の **仮想カメラを開始** して、会議アプリのカメラに「OBS Virtual Camera」を選ぶ
-
-UI を再表示するには、もう一度 **F9** を押します（Hide UI は保存されないため、次回起動時は常に表示状態に戻ります）。
+Press **Start face cam** to drive the avatar from your webcam instead of the mouse.
+Look straight ahead and use Tweaks → **Calibrate** to set center. Optionally enable
+**Mouth from face** and **Blink from face**. Inference is local (MediaPipe); stopping
+the camera returns control to the mouse. Use the camera tuning controls
+(brightness/contrast, resolution, detection thresholds) if tracking is unstable.
 
 ---
 
-## 顔カメラで動かす
+## Streaming & meetings (OBS)
 
-Webカメラで自分の顔の向きにキャラを追従させられます（マウスの代わり）。推論は **MediaPipe** によりこの端末内だけで処理され、映像は外部に送信されません。
-
-1. 下のバーの **顔カメラ開始** を押してカメラを許可する（カメラ ON の間はマウス追従より顔追跡が優先されます）
-2. 正面を向いて、Tweaks の **Face camera → Calibrate (look straight)** を押して中心を合わせる（開始直後にも自動で一度取得します）
-3. **Head sensitivity** で振り向きの効き、**Mirror / Invert vertical** で左右・上下の向きを調整する
-4. 必要なら **Mouth from face (jaw)** で口を、**Blink from face** でまばたきを顔から駆動する（オフのままならマイク＝口、タイマー＝まばたき）
-
-顔カメラを停止するとマウス追従に戻ります。カメラは毎回 OFF の状態で起動します。
-
-### 精度を上げる（Tweaks → Camera tuning / Detection）
-
-うまく追従しないときは次を調整してください。
-
-- **Show preview**: 左下にカメラ映像を表示。顔がフレームに収まっているか・明るさを確認できます
-- **Brightness / Contrast**: 暗い・コントラストが低い環境で上げると検出が安定します（映像処理はこの端末内のみ）
-- **Camera**: 複数カメラがある場合に使うカメラを選択
-- **Resolution（480p / 720p）**: 720p にすると精度が上がりますが負荷も増えます
-- **Detection (advanced)**: 顔以外を誤検出する／検出が外れる場合に Min detection / presence / tracking を調整
-
-> **セットアップ:** 顔追跡のモデル/WASM は `public/mediapipe/`（約25MB）に同梱しています。クローン直後やバージョン更新時に再取得する場合は `npm install` 後に次を実行してください。
->
-> ```bash
-> npm run setup:mediapipe
-> ```
+1. In **Tweaks → Output**, turn on the **greenscreen** background (pick a chroma color).
+2. Press **F9** to hide all UI (desktop also hides the window menu bar). Only the
+   character renders. Hide-UI is not persisted — it always starts visible.
+3. In OBS add a **Window Capture** of the app window.
+4. Add a **Chroma Key** filter to remove the background.
+5. For meetings, start **OBS Virtual Camera** and select it in Zoom/Meet/Teams.
 
 ---
 
-## 公開URL
+## Characters
 
-GitHub Pagesで公開しています。
+Open the **Characters** handle (left edge) to switch. Each character is a folder that
+mirrors the bundled layout: `<name>/A…F/r#c#.webp` (90 frames). Discovery is:
 
-```text
-https://rotejin.github.io/tomari-guruguru/
-```
+- **Desktop (.exe):** a `characters/` folder is created next to the executable and
+  seeded with the default Tomari on first run.
+- **`npm run dev`:** the project-root `characters/` folder (served by dev middleware).
+- **GitHub Pages:** static, so only the bundled character is available.
 
-トップページは `talk.html` に自動転送されます。
+### Add a character in-app (`+ Add character`)
 
----
+Available in the desktop app and `npm run dev`:
 
-## キャラクターを切り替える
+1. Open **? How to make** — it shows the angle template and copies the generation
+   prompt for producing the 6 angle sheets (A–F).
+2. Open **+ Add character**, pick the 6 sheets, keep **Auto-center heads** on (set the
+   background color if you didn't use green), name it, and **Create**.
+3. The app chroma-keys the background to transparent, auto-centers each head
+   (horizontal center + chin anchor), slices the 5×3 grid into 90 frames, and selects
+   the new character.
 
-左端の「キャラ」ハンドルを押すとキャラクター一覧が開きます。選ぶと即座に切り替わり、**↻ 一覧を更新**でフォルダの再スキャンができます。
+For tricky art (overflowing hair, soft edges, residue), `tools/slice_character_sheets.py`
+(`component` mode, requires `ffmpeg`/`ffprobe`) is the high-fidelity alternative.
 
-キャラクターは `characters/<キャラ名>/` フォルダで追加します。中身は同梱キャラと同じ構成（`A`〜`F` の各フォルダに `r0c0.webp`〜`r4c4.webp`、計150枚）です。
+### Make your own character
 
-- **デスクトップ版(.exe)**: .exe と同じ場所に `characters/` フォルダが作られ、初回起動時にデフォルトキャラ（トマリ）が入ります。ここに新しいフォルダを入れて **フォルダを開く** / **一覧を更新** で反映します。
-- **`npm run dev`**: プロジェクト直下の `characters/` を読みます（無ければ作成して同上の構成で配置）。
-- **GitHub Pages（静的公開）**: フォルダ走査ができないため、同梱のトマリのみ表示されます。
-
-### アプリ内で追加する（＋ Add character）
-
-手動でフォルダを作らなくても、左メニューの **＋ Add character** から追加できます（デスクトップ版／`npm run dev`）。
-
-1. **？ How to make** を開き、5×5テンプレートと **Copy prompt** を使って6枚の角度シート（A〜F）を生成する
-2. **＋ Add character** を開き、A〜Fの枠に6枚を選び、名前を入れて **Create**
-3. アプリが各シートを5×5に分割して150フレームを書き出し、そのキャラを選択します
-
-> アプリ内のスライスは単純な5×5分割です。AI生成シート（プロンプト通りに整列・透過背景）には十分ですが、髪のはみ出しや背景残りがある素材は `tools/slice_character_sheets.py`（component mode）の方が高品質です。
-
----
-
-## 自分のキャラで作るには
-
-このアプリで動かすには最終的に **5×5角度シートを6枚** 作る必要があります。
-
-必要な6枚:
-
-```text
-A_目開け_口とじ.png
-B_目開け_口中間.png
-C_目開け_口開け.png
-D_目閉じ_口とじ.png
-E_目閉じ_口中間.png
-F_目閉じ_口開け.png
-```
-
-おすすめの流れ:
-
-1. 自分のキャラクター参照画像を用意する
-2. `docs/01_画像生成用テンプレ.png` と合わせてChatGPT Images 2.0に添付する
-3. `docs/01_画像生成用プロンプト.txt` の指示を使って6枚のシートを作る
-4. 6枚のPNGを `新キャラ資料/` フォルダに入れる
-5. `tools/slice_character_sheets.py` でスライス画像を生成
-
-詳しい注意点や検証方法は `docs/新キャラ差し替え手順.md` を参照してください。
+The full workflow — the 5×3 grid, the 6 A–F sheets, the generation prompts, and both
+slicing paths — is documented in **[`docs/character-guide.md`](docs/character-guide.md)**.
+The prompts themselves are the source of truth in `src/character-guide.js`.
 
 ---
 
-## ライセンス
+## License
 
-このリポジトリは、**プログラム部分** と **キャラクター素材・音声** でライセンスを分けています。
+This repo splits licensing between code and assets:
 
-### プログラム部分
-
-プログラムコードは MIT License で公開しています。詳細は `LICENSE` を参照してください。
-
-### キャラクター画像・音声・生成素材
-
-キャラクター画像、スライス済みフレーム、サムネイル、音声ファイルは MIT License の対象外です。
-非商用の範囲でのSNS投稿はOKですが、商用利用や他プロジェクトへの流用は禁止です。
-詳細は `ASSET_LICENSE.md` を参照してください。
+- **Code** — MIT License (see `LICENSE`).
+- **Character art, slices, thumbnails, and audio** — **not** MIT; non-commercial only
+  (see `ASSET_LICENSE.md`). Don't relicense or reuse the assets outside this project.
 
 ---
 
-## 技術スタック
+## Tech stack
 
-- **Vite 8** — ビルド・開発サーバー
-- **React 18** — UI フレームワーク
-- **@vitejs/plugin-react 6** — JSX トランスフォーム
+- **Vite 8** — build + dev server (multi-page)
+- **React 18** — UI
+- **@mediapipe/tasks-vision** — on-device face landmarking
+- **Electron** — Windows desktop packaging

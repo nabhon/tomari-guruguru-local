@@ -27,6 +27,7 @@ function createWindow() {
     ...(bounds || {}),
     backgroundColor: '#FFF8EE',
     title: 'CaffeLook',
+    icon: path.join(__dirname, '..', 'CaffeLook.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

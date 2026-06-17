@@ -6,6 +6,7 @@ files:
   - dist/**
   - electron/**
   - package.json
+  - CaffeLook.ico
 win:
   target: portable
-# アイコン未指定（electron-builder の既定アイコン）。後で .ico を追加可能。
+  icon: CaffeLook.ico
