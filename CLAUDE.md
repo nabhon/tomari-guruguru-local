@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**トマリトーク** (`talk.html` / `src/talk-app.jsx`) — a browser/desktop avatar for the character "Tomari" that turns to follow the mouse across 25 directions and lip-syncs from the mic with auto-blink.
+**トマリトーク** (`talk.html` / `src/talk-app.jsx`) — a browser/desktop avatar for the character "Tomari" that turns to follow the mouse across 15 directions and lip-syncs from the mic with auto-blink.
 
 Frontend (React + Vite), deployed to GitHub Pages, and also packaged as a Windows desktop app via Electron (`electron/`). No backend. (A second mouse-follow-only "ぐるぐる" mode was removed; the `guruguru` name survives only in the repo name and the `/tomari-guruguru/` Pages base path.)
 
@@ -20,7 +20,7 @@ npm run build:desktop# vite build --mode electron (base './' for file://)
 npm run dist         # build:desktop + electron-builder → portable .exe in release/
 ```
 
-There are no tests and no linter. `npm run verify:pages` (see `scripts/verify-pages-build.mjs`) is the closest thing to a test — it asserts the built HTML uses the `/tomari-guruguru/` base path (not root `/assets/`), that referenced assets exist, and that each of the 6 sheets (`A`–`F`) under `dist/slices2/` contains exactly 25 `.webp` files. CI (`.github/workflows/pages.yml`) runs `build` then `verify:pages` on every PR/push to `main`; deploy only happens on `main`.
+There are no tests and no linter. `npm run verify:pages` (see `scripts/verify-pages-build.mjs`) is the closest thing to a test — it asserts the built HTML uses the `/tomari-guruguru/` base path (not root `/assets/`), that referenced assets exist, and that each of the 6 sheets (`A`–`F`) under `dist/slices2/` contains exactly 15 `.webp` files. CI (`.github/workflows/pages.yml`) runs `build` then `verify:pages` on every PR/push to `main`; deploy only happens on `main`.
 
 Node ^20.19 or >=22.12 is required (Vite 8 constraint). Mic input only works on `localhost` or HTTPS.
 
@@ -32,11 +32,11 @@ Node ^20.19 or >=22.12 is required (Vite 8 constraint). Mic input only works on 
 
 **Behavior is split into pluggable drivers (Cycle 0 refactor).** `src/talk-app.jsx` composes input *sources* over a shared loop rather than hardcoding them: `src/engine/useAvatarLoop.js` runs the single `requestAnimationFrame` loop (smooth target → grid cell, plus an `onFrame` seam); `src/drivers/mouseDirection.js` (pointer → direction), `src/drivers/audioMouth.js` (`useAudioMouth` — audio → mouth stage), `src/drivers/blinkTimer.js` (timer → blink), and `src/drivers/faceTracking.js` (`useFaceTracking` — webcam → all three channels; see below). `src/engine/shared.js` holds `clamp`/`cellFromXY`/`themeColors`/`BG_OPTIONS`. `src/drivers/types.js` documents the source contract (the face source is the "one inference loop backs multiple channels" case it anticipated).
 
-**`src/character-config.js` is the single source of truth for character art.** It maps a sheet letter + (row, col) to an image path via `src(sheet, r, c)` → `slices2/<sheet>/r<r>c<c>.webp`. The 25 directions are a 5×5 grid (`r0`=look up … `r4`=look down; `c0`=left … `c4`=right). The 6 sheets are eye×mouth combinations: `A`/`B`/`C` = eyes open with mouth closed/half/open, `D`/`E`/`F` = eyes closed with the same mouth states. To swap characters, regenerate the slices and adjust `basePath`/`ext` here only.
+**`src/character-config.js` is the single source of truth for character art.** It maps a sheet letter + (row, col) to an image path via `src(sheet, r, c)` → `slices2/<sheet>/r<r>c<c>.webp`. The 15 directions are a 5×3 grid (`r0`=look up … `r4`=look down; `c0`=45° left, `c1`=front, `c2`=45° right). The 6 sheets are eye×mouth combinations: `A`/`B`/`C` = eyes open with mouth closed/half/open, `D`/`E`/`F` = eyes closed with the same mouth states. To swap characters, regenerate the slices and adjust `basePath`/`ext` here only.
 
 **Runtime character switching** is layered on top via `charConfig.srcFrom(base, sheet, r, c)` (the renderer holds a `charBase` and swaps it; `src()` is just `srcFrom(basePath, …)`). Discovery is **tri-modal** because scanning a `characters/` folder needs a filesystem: **Electron** (`window.tomariDesktop.listCharacters()` → frames served by a privileged custom protocol `tomari-char://chars/<name>/…`, handled in `electron/main.cjs` via `electron/characters.cjs`), **dev** (`npm run dev` → a `configureServer` middleware in `vite.config.js` exposes `/__characters` + `/characters/…`), and **static Pages** (no scan → built-in `slices2` only). The `characters/` dir lives **next to the portable .exe** (`PORTABLE_EXECUTABLE_DIR`, else project root in `electron:dev`) and `ensureDefaultCharacter()` seeds it with the bundled トマリ on first run. Each character folder mirrors the `slices2` layout (`<name>/A…F/r#c#.webp`); validity = has an `A/` subfolder. The selected character id persists in the `character` tweak and falls back to built-in if its folder is gone. `characters/` is git-ignored.
 
-**In-app "Add character"** (left menu, Electron + dev only): a popup takes the 6 angle sheets, and `sliceSheets()` in `talk-app.jsx` does a **simple 5×5 grid split** on a Canvas → 150 webp `ArrayBuffer`s, written via `characters:create` IPC (`electron/characters.cjs createCharacter`) or, in dev, `POST /__characters/create` (the `vite.config.js` middleware, base64). This is intentionally simpler than `tools/slice_character_sheets.py` (no connected-component extraction / gray-residue removal) — fine for prompt-following AI sheets; the Python tool stays the high-fidelity path. The **"How to make"** guide popup shows `public/guide/template.png` and copies `GEN_PROMPT` from `src/character-guide.js` (the generation prompt is inlined there, kept in sync with `docs/01_画像生成用プロンプト.txt`).
+**In-app "Add character"** (left menu, Electron + dev only): a popup takes the 6 angle sheets, and `sliceSheets()` in `talk-app.jsx` does a **simple 5×3 grid split** on a Canvas → 90 webp `ArrayBuffer`s, written via `characters:create` IPC (`electron/characters.cjs createCharacter`) or, in dev, `POST /__characters/create` (the `vite.config.js` middleware, base64). This is intentionally simpler than `tools/slice_character_sheets.py` (no connected-component extraction / gray-residue removal) — fine for prompt-following AI sheets; the Python tool stays the high-fidelity path. The **"How to make"** guide popup shows `public/guide/template.png` and copies `GEN_PROMPT` from `src/character-guide.js` (the generation prompt is inlined there; the full workflow is documented in `docs/character-guide.md`).
 
 **Rendering approach:** all frames for the current state are rendered as stacked absolutely-positioned `<img>`s; only the active one has `opacity: 1`. This preloads every frame so direction/mouth changes are instant with no flicker. Auto-blink is a self-scheduling `setTimeout` chain with randomized intervals (single/double/slow blinks) in `blinkTimer.js`.
 
@@ -59,7 +59,7 @@ The floating "Tweaks" panel is a generic harness scaffold, not bespoke to this p
 
 ## Character asset pipeline
 
-`tools/slice_character_sheets.py` slices six 5×5 sheet PNGs (from `新キャラ資料/`) into the 150 individual `public/slices2/<A–F>/r#c#.webp` frames. It shells out to **ffmpeg/ffprobe** (must be on PATH). `public/slices2/` is committed; the source `sheets/`, `uploads/`, and `新キャラ資料/` directories are git-ignored. Full replacement workflow is in `docs/新キャラ差し替え手順.md`.
+`tools/slice_character_sheets.py` slices six 5×3 sheet PNGs (from `新キャラ資料/`) into the 90 individual `public/slices2/<A–F>/r#c#.webp` frames. It shells out to **ffmpeg/ffprobe** (must be on PATH). `public/slices2/` is committed; the source `sheets/`, `uploads/`, and `新キャラ資料/` directories are git-ignored. Full workflow is in `docs/character-guide.md`.
 
 ## License boundary
 

@@ -157,7 +157,7 @@ export function useFaceTracking({ tweaksRef, targetRef }) {
     await v.play();
     try {
       const devs = await navigator.mediaDevices.enumerateDevices();
-      setCameras(devs.filter((d) => d.kind === 'videoinput').map((d) => ({ deviceId: d.deviceId, label: d.label || 'カメラ' })));
+      setCameras(devs.filter((d) => d.kind === 'videoinput').map((d) => ({ deviceId: d.deviceId, label: d.label || 'Camera' })));
       if (!cameraIdRef.current) {
         const tr = stream.getVideoTracks()[0];
         const sid = tr && tr.getSettings && tr.getSettings().deviceId;

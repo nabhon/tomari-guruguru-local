@@ -60,11 +60,11 @@ function assertSliceImages() {
     const dir = join(DIST, 'slices2', sheet);
     assertFile(dir);
     const webpFiles = readdirSync(dir).filter((name) => name.endsWith('.webp'));
-    if (webpFiles.length !== 25) {
-      fail(`${posix.join('dist', 'slices2', sheet)} should contain 25 webp files, found ${webpFiles.length}`);
+    if (webpFiles.length !== 15) {
+      fail(`${posix.join('dist', 'slices2', sheet)} should contain 15 webp files, found ${webpFiles.length}`);
     }
     for (let r = 0; r < 5; r += 1) {
-      for (let c = 0; c < 5; c += 1) {
+      for (let c = 0; c < 3; c += 1) {
         assertFile(join(dir, `r${r}c${c}.webp`));
       }
     }

@@ -7,7 +7,7 @@ export function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
 // 背景色プリセット（最後の #2B2926 はダークテーマ）
 export const BG_OPTIONS = ['#FFF8EE', '#FDEFEF', '#EEF4FB', '#2B2926'];
 
-// 平滑化後の -1..1 座標を 5×5 グリッドのセルへ写像
+// 平滑化後の -1..1 座標を 5×3 グリッドのセルへ写像
 export function cellFromXY(x, y, rows, cols) {
   const c = clamp(Math.round((x + 1) / 2 * (cols - 1)), 0, cols - 1);
   const r = clamp(Math.round((y + 1) / 2 * (rows - 1)), 0, rows - 1);

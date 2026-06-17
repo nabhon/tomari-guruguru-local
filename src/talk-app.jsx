@@ -75,7 +75,7 @@ const SHEET_DESC = {
   D: 'Eyes closed · mouth closed', E: 'Eyes closed · mouth half', F: 'Eyes closed · mouth open',
 };
 
-// 6シートを 5×5 単純分割で 150 フレーム(webp)へ。fileMap[sheet] は File。
+// 6シートを 5×3 単純分割で 90 フレーム(webp)へ。fileMap[sheet] は File。
 async function sliceSheets(fileMap, onProgress) {
   const out = [];
   let done = 0;
@@ -83,9 +83,9 @@ async function sliceSheets(fileMap, onProgress) {
   const ctx = canvas.getContext('2d');
   for (const sheet of SHEET_KEYS) {
     const bmp = await createImageBitmap(fileMap[sheet]);
-    const cw = Math.floor(bmp.width / 5), ch = Math.floor(bmp.height / 5);
+    const cw = Math.floor(bmp.width / 3), ch = Math.floor(bmp.height / 5);
     canvas.width = cw; canvas.height = ch;
-    for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) {
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) {
       ctx.clearRect(0, 0, cw, ch);
       ctx.drawImage(bmp, c * cw, r * ch, cw, ch, 0, 0, cw, ch);
       const blob = await new Promise((res) => canvas.toBlob(res, 'image/webp', 1));
@@ -194,8 +194,8 @@ function App() {
     if (SHEET_KEYS.some((k) => !addFiles[k])) { setAddStatus('Pick all 6 sheets (A–F)'); return; }
     setAddBusy(true);
     try {
-      setAddStatus('Slicing 0/150');
-      const frames = await sliceSheets(addFiles, (n) => setAddStatus(`Slicing ${n}/150`));
+      setAddStatus('Slicing 0/90');
+      const frames = await sliceSheets(addFiles, (n) => setAddStatus(`Slicing ${n}/90`));
       setAddStatus('Saving…');
       const res = await writeCharacter(name, frames);
       if (!res || !res.ok) {
@@ -370,7 +370,7 @@ function App() {
             display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: inkColor }}>Add character</div>
-            <div style={{ fontSize: 12, color: subColor }}>Pick the 6 angle sheets (5×5 each). They’re sliced into 150 frames automatically.</div>
+            <div style={{ fontSize: 12, color: subColor }}>Pick the 6 angle sheets (5×3 each). They’re sliced into 90 frames automatically.</div>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 700, color: inkColor }}>
               Name
               <input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="MyCharacter" style={{
@@ -415,11 +415,11 @@ function App() {
             display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: inkColor }}>How to make a character</div>
-            <img src="guide/template-grid.png" alt="5×5 angle template (grid)" style={{
+            <img src="guide/template-grid.png" alt="5×3 angle template (grid)" style={{
               maxWidth: '100%', maxHeight: '38vh', objectFit: 'contain', alignSelf: 'center',
               borderRadius: 10, border: `1px solid ${lineColor}`, background: '#fff'
             }}></img>
-            <a href="guide/template-grid.png" download="tomari-5x5-template.png" style={{
+            <a href="guide/template-grid.png" download="tomari-5x3-template.png" style={{
               alignSelf: 'center', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, color: inkColor,
               textDecoration: 'none', border: `1.5px solid ${lineColor}`, borderRadius: 10, padding: '7px 14px'
             }}>⤓ Download template (attach this to ChatGPT)</a>

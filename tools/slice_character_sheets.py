@@ -56,7 +56,9 @@ def probe_size(path: Path) -> tuple[int, int]:
     return int(w), int(h)
 
 
-def decode_rgba(path: Path, target_size: int | None = None) -> bytes:
+def decode_rgba(
+    path: Path, target_size: tuple[int, int] | None = None
+) -> bytes:
     cmd = [
         "ffmpeg",
         "-v",
@@ -65,12 +67,13 @@ def decode_rgba(path: Path, target_size: int | None = None) -> bytes:
         str(path),
     ]
     if target_size is not None:
-        # Fit the source inside the target square without distorting the aspect
-        # ratio, then pad the remaining area with transparency.
+        # Fit the source inside the target box (w, h) without distorting the
+        # aspect ratio, then pad the remaining area with transparency.
+        tw, th = target_size
         resize_filter = (
-            f"scale={target_size}:{target_size}:"
+            f"scale={tw}:{th}:"
             "force_original_aspect_ratio=decrease:flags=lanczos,"
-            f"pad={target_size}:{target_size}:(ow-iw)/2:(oh-ih)/2:color=black@0,"
+            f"pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:color=black@0,"
             "format=rgba"
         )
         cmd += ["-vf", resize_filter]
@@ -234,13 +237,13 @@ def assign_components_to_cells(
     min_area: int,
 ) -> dict[tuple[int, int], list[int]]:
     assignments: dict[tuple[int, int], list[int]] = {
-        (row, col): [] for row in range(5) for col in range(5)
+        (row, col): [] for row in range(5) for col in range(3)
     }
     for comp_id, comp in components.items():
         if comp.area < min_area:
             continue
         cx, cy = comp.center
-        col = min(4, max(0, round((cx - cell / 2) / cell)))
+        col = min(2, max(0, round((cx - cell / 2) / cell)))
         row = min(4, max(0, round((cy - cell / 2) / cell)))
         assignments[(row, col)].append(comp_id)
     return assignments
@@ -496,7 +499,7 @@ def encode_image(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Slice 5x5 character sheets into anchored 1200x1200 frames."
+        description="Slice 5x3 character sheets into anchored 1200x1200 frames."
     )
     parser.add_argument("--source", default="新キャラ資料", type=Path)
     parser.add_argument("--sheets-out", default="sheets", type=Path)
@@ -543,14 +546,15 @@ def main() -> None:
     for sheet in SHEET_NAMES:
         src = find_source(args.source, sheet)
         w_orig, h_orig = probe_size(src)
-        expected = args.cell * 5
-        if (w_orig, h_orig) != (expected, expected):
+        expected_w = args.cell * 3
+        expected_h = args.cell * 5
+        if (w_orig, h_orig) != (expected_w, expected_h):
             print(
                 f"  NOTE: {src.name} is {w_orig}x{h_orig}, "
-                f"will fit into {expected}x{expected} without stretching"
+                f"will fit into {expected_w}x{expected_h} without stretching"
             )
-            w, h = expected, expected
-            resize_target = expected
+            w, h = expected_w, expected_h
+            resize_target = (expected_w, expected_h)
         else:
             w, h = w_orig, h_orig
             resize_target = None
@@ -560,7 +564,7 @@ def main() -> None:
 
         pending: list[tuple[int, int, Path]] = []
         for row in range(5):
-            for col in range(5):
+            for col in range(3):
                 out = args.slices_out / sheet / f"r{row}c{col}.{args.format}"
                 if args.resume and out.exists() and out.stat().st_size > 0:
                     if out.stat().st_mtime >= src.stat().st_mtime:
@@ -593,7 +597,7 @@ def main() -> None:
             print(f"  components={len(components)} large={large_count}")
             for row in range(5):
                 row_summary = []
-                for col in range(5):
+                for col in range(3):
                     ids = assignments[(row, col)]
                     area = sum(components[i].area for i in ids)
                     row_summary.append(f"{len(ids)}:{area}")
