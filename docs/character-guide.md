@@ -42,9 +42,10 @@ angle grid:
    generate sheet **A** (eyes open, mouth closed).
 3. Use the follow-up lines at the end of the prompt to derive the eyes-closed and
    mouth half/open variants (sheets B–F).
-4. Export each sheet as a **3:5 portrait** image (e.g. 900×1500) on a transparent
-   background. Keep the character scale and position identical across all 6 so the
-   frames line up.
+4. Export each sheet as a **3:5 portrait** image (e.g. 900×1500) on a **solid flat
+   chroma-green background** (e.g. `#00FF00`) — the in-app slicer keys this out, so the
+   character must not use that exact green anywhere. Keep the character scale and
+   position identical across all 6 so the frames line up.
 
 The two prompts (standard and the 3-image art-style variant) are the single source of
 truth in [`src/character-guide.js`](../src/character-guide.js) — `GEN_PROMPT` and
@@ -61,8 +62,12 @@ sides, every head the same size, and nothing bleeding into a neighbor.
 Two paths produce the 90 `r#c#.webp` frames:
 
 - **In-app "+ Add character"** (Electron + `npm run dev`): pick the 6 sheets in the
-  A–F slots, name it, Create. This does a simple 5×3 grid split (`width ÷ 3` ×
-  `height ÷ 5`) — ideal for clean AI sheets made with the prompt above.
+  A–F slots, name it, Create. With **"Auto-center heads"** on (default), it
+  **chroma-keys** the background to transparency (default key color green, configurable
+  via the color picker — set it if you used a non-green background) and **re-anchors**
+  each head (horizontal center + chin bottom-anchor) before the 5×3 grid split
+  (`width ÷ 3` × `height ÷ 5`). Turn the checkbox off for a plain verbatim crop. Ideal
+  for clean AI sheets made with the prompt above.
 - **`tools/slice_character_sheets.py`** (high-fidelity): connected-component
   extraction and gray-residue removal for tricky art (overflowing hair, gray edges).
   Requires `ffmpeg`/`ffprobe` on PATH. Expects a 3:5 sheet (`--cell` wide × `--cell`

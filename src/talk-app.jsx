@@ -75,20 +75,77 @@ const SHEET_DESC = {
   D: 'Eyes closed · mouth closed', E: 'Eyes closed · mouth half', F: 'Eyes closed · mouth open',
 };
 
-// 6シートを 5×3 単純分割で 90 フレーム(webp)へ。fileMap[sheet] は File。
-async function sliceSheets(fileMap, onProgress) {
+// 自動センタリング/クロマキーの調整値（Python スライサーの anchor 相当）
+const ALPHA_T = 16;          // これ以下の alpha は背景とみなす
+const CHROMA_TOL = 120;      // キー色からの RGB ユークリッド距離しきい値
+const CHROMA_TOL2 = CHROMA_TOL * CHROMA_TOL;
+const ANCHOR_Y_RATIO = 0.80; // あご(bbox 下端)をセル高のこの位置へ合わせる
+
+// '#rrggbb' → {r,g,b}（不正値は緑にフォールバック）
+function parseHex(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  const n = m ? parseInt(m[1], 16) : 0x00ff00;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+// 6シートを 5×3 で 90 フレーム(webp)へ。opts.autoCenter で背景クロマキー＋頭の
+// 自動センタリング（水平中央＋あご下端アンカー）を行う。fileMap[sheet] は File。
+async function sliceSheets(fileMap, onProgress, opts = {}) {
+  const { autoCenter = false, chromaColor = '#00ff00' } = opts;
+  const key = parseHex(chromaColor);
   const out = [];
   let done = 0;
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+  const work = document.createElement('canvas');
+  const wctx = work.getContext('2d', { willReadFrequently: true });
+  const dst = document.createElement('canvas');
+  const dctx = dst.getContext('2d');
   for (const sheet of SHEET_KEYS) {
     const bmp = await createImageBitmap(fileMap[sheet]);
     const cw = Math.floor(bmp.width / 3), ch = Math.floor(bmp.height / 5);
-    canvas.width = cw; canvas.height = ch;
+    work.width = cw; work.height = ch;
+    dst.width = cw; dst.height = ch;
     for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) {
-      ctx.clearRect(0, 0, cw, ch);
-      ctx.drawImage(bmp, c * cw, r * ch, cw, ch, 0, 0, cw, ch);
-      const blob = await new Promise((res) => canvas.toBlob(res, 'image/webp', 1));
+      wctx.clearRect(0, 0, cw, ch);
+      wctx.drawImage(bmp, c * cw, r * ch, cw, ch, 0, 0, cw, ch);
+
+      let source = work; // 既定（autoCenter オフ）は素のクロップ
+      if (autoCenter) {
+        const img = wctx.getImageData(0, 0, cw, ch);
+        const d = img.data;
+        let minX = cw, minY = ch, maxX = -1, maxY = -1, content = 0;
+        for (let y = 0; y < ch; y++) {
+          for (let x = 0; x < cw; x++) {
+            const i = (y * cw + x) * 4;
+            const a = d[i + 3], rr = d[i], gg = d[i + 1], bb = d[i + 2];
+            const dr = rr - key.r, dg = gg - key.g, db = bb - key.b;
+            const isBg = a <= ALPHA_T || (dr * dr + dg * dg + db * db) <= CHROMA_TOL2;
+            if (isBg) {
+              d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0; // 透過へ
+            } else {
+              const mx = Math.max(rr, bb); // 緑のにじみ(despill)を抑制
+              if (gg > mx) d[i + 1] = mx;
+              content++;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (content > 0) {
+          wctx.putImageData(img, 0, 0);
+          let dx = Math.round(cw / 2 - (minX + maxX) / 2);
+          let dy = Math.round(ch * ANCHOR_Y_RATIO - maxY);
+          if (minY + dy < 0) dy = -minY;            // 頭頂が切れないように
+          if (maxY + dy > ch - 1) dy = ch - 1 - maxY; // あごがはみ出ないように
+          dctx.clearRect(0, 0, cw, ch);
+          dctx.drawImage(work, dx, dy);
+          source = dst;
+        }
+        // content === 0（キー色ミス等）は素のクロップにフォールバック
+      }
+
+      const blob = await new Promise((res) => source.toBlob(res, 'image/webp', 1));
       out.push({ path: `${sheet}/r${r}c${c}.webp`, data: await blob.arrayBuffer() });
       if (onProgress) onProgress(++done);
     }
@@ -149,6 +206,8 @@ function App() {
   const [addFiles, setAddFiles] = useState({});   // { A: File, ... }
   const [addStatus, setAddStatus] = useState('');
   const [addBusy, setAddBusy] = useState(false);
+  const [addAutoCenter, setAddAutoCenter] = useState(true);
+  const [addBgColor, setAddBgColor] = useState('#00ff00');
   const [promptCopied, setPromptCopied] = useState(''); // '' | 'normal' | 'style'
   // Electron(file://)では navigator.clipboard が使えないのでネイティブ経由。
   const copyPrompt = async (text, key) => {
@@ -195,7 +254,7 @@ function App() {
     setAddBusy(true);
     try {
       setAddStatus('Slicing 0/90');
-      const frames = await sliceSheets(addFiles, (n) => setAddStatus(`Slicing ${n}/90`));
+      const frames = await sliceSheets(addFiles, (n) => setAddStatus(`Slicing ${n}/90`), { autoCenter: addAutoCenter, chromaColor: addBgColor });
       setAddStatus('Saving…');
       const res = await writeCharacter(name, frames);
       if (!res || !res.ok) {
@@ -211,7 +270,7 @@ function App() {
       setAddStatus('Error: ' + (e && e.message ? e.message : String(e)));
     }
     setAddBusy(false);
-  }, [addName, addFiles, refreshCharacters, selectCharacter]);
+  }, [addName, addFiles, addAutoCenter, addBgColor, refreshCharacters, selectCharacter]);
 
   // 入力ソース: 方向＝マウス／顔、口＝音声／顔、まばたき＝タイマー／顔。
   // 顔カメラが ON の間は顔が方向を握り、マウスは書き込みを止める。
@@ -370,7 +429,7 @@ function App() {
             display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: inkColor }}>Add character</div>
-            <div style={{ fontSize: 12, color: subColor }}>Pick the 6 angle sheets (5×3 each). They’re sliced into 90 frames automatically.</div>
+            <div style={{ fontSize: 12, color: subColor }}>Pick the 6 angle sheets (5×3, solid green background). Heads are keyed and auto-centered into 90 frames.</div>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 700, color: inkColor }}>
               Name
               <input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="MyCharacter" style={{
@@ -387,6 +446,18 @@ function App() {
                 }} style={{ fontSize: 12, color: subColor }}></input>
               </label>
             ))}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: inkColor }}>
+              <input type="checkbox" checked={addAutoCenter} onChange={(e) => setAddAutoCenter(e.target.checked)}></input>
+              Auto-center heads (remove background)
+            </label>
+            {addAutoCenter ? (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: inkColor }}>
+                <input type="color" value={addBgColor} onChange={(e) => setAddBgColor(e.target.value)} style={{
+                  width: 36, height: 28, padding: 0, border: `1.5px solid ${lineColor}`, borderRadius: 6, background: 'transparent', cursor: 'pointer'
+                }}></input>
+                Background color to remove
+              </label>
+            ) : null}
             {addStatus ? <div style={{ fontSize: 12, fontWeight: 700, color: subColor }}>{addStatus}</div> : null}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button disabled={addBusy} onClick={() => setShowAdd(false)} style={{
